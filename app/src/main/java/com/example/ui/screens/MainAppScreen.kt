@@ -1,15 +1,11 @@
 package com.example.ui.screens
 
 import android.app.DatePickerDialog
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
-import android.provider.Settings
 import android.widget.DatePicker
 import android.widget.Toast
+import android.view.ViewGroup
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +24,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -41,22 +36,47 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.viewinterop.AndroidView
+import com.example.R
 import com.example.data.model.Balance
 import com.example.data.model.ExchangeRate
 import com.example.data.model.Trade
 import com.example.ui.theme.*
 import com.example.ui.viewmodel.P2PViewModel
+import com.github.mikephil.charting.charts.LineChart
+import com.github.mikephil.charting.data.Entry
+import com.github.mikephil.charting.data.LineData
+import com.github.mikephil.charting.data.LineDataSet
+import com.github.mikephil.charting.components.XAxis
+import com.github.mikephil.charting.formatter.ValueFormatter
+import android.graphics.Color as AndroidColor
 import java.text.DecimalFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Dynamic Localized Context configuration wrapper to read strings dynamically on language swaps
+fun getLocalizedContext(context: Context, lang: String): Context {
+    val locale = Locale(lang)
+    Locale.setDefault(locale)
+    val config = android.content.res.Configuration(context.resources.configuration)
+    config.setLocale(locale)
+    config.setLayoutDirection(locale)
+    return context.createConfigurationContext(config)
+}
+
 @Composable
 fun MainAppScreen(viewModel: P2PViewModel) {
-    // Force RTL layout representation
-    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+    val langState by viewModel.language.collectAsState()
+    val localizedContext = getLocalizedContext(LocalContext.current, langState)
+    
+    fun getString(resId: Int): String {
+        return localizedContext.getString(resId)
+    }
+
+    CompositionLocalProvider(
+        LocalLayoutDirection provides (if (langState == "ar") LayoutDirection.Rtl else LayoutDirection.Ltr)
+    ) {
         val currentTab by viewModel.currentTab.collectAsState()
         val editingTrade by viewModel.editingTrade.collectAsState()
-        val context = LocalContext.current
 
         Scaffold(
             containerColor = BgColor,
@@ -68,11 +88,12 @@ fun MainAppScreen(viewModel: P2PViewModel) {
                     modifier = Modifier.navigationBarsPadding()
                 ) {
                     val items = listOf(
-                        Triple("HOME", "الرئيسية", Icons.Default.Home),
-                        Triple("ADD_TRADE", if (editingTrade != null) "تعديل صفقة" else "صفقة جديدة", Icons.Default.AddCircle),
-                        Triple("HISTORY", "السجل", Icons.Default.List),
-                        Triple("RATES", "الأسعار", Icons.Default.Star),
-                        Triple("SETTINGS", "الإعدادات", Icons.Default.Settings)
+                        Triple("HOME", getString(R.string.home), Icons.Default.Home),
+                        Triple("ADD_TRADE", if (editingTrade != null) getString(R.string.edit_trade) else getString(R.string.trade), Icons.Default.AddCircle),
+                        Triple("HISTORY", getString(R.string.history), Icons.Default.List),
+                        Triple("CALENDAR", getString(R.string.calendar), Icons.Default.DateRange),
+                        Triple("RATES", getString(R.string.rates), Icons.Default.Star),
+                        Triple("SETTINGS", getString(R.string.settings), Icons.Default.Settings)
                     )
                     items.forEach { (tab, label, icon) ->
                         NavigationBarItem(
@@ -83,8 +104,10 @@ fun MainAppScreen(viewModel: P2PViewModel) {
                                 Text(
                                     label, 
                                     color = if (currentTab == tab) GoldColor else TextSecondaryColor,
-                                    fontSize = 11.sp,
-                                    fontWeight = if (currentTab == tab) FontWeight.Bold else FontWeight.Normal
+                                    fontSize = 10.sp,
+                                    fontWeight = if (currentTab == tab) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 ) 
                             },
                             colors = NavigationBarItemDefaults.colors(
@@ -102,40 +125,139 @@ fun MainAppScreen(viewModel: P2PViewModel) {
                     .padding(innerPadding)
             ) {
                 when (currentTab) {
-                    "HOME" -> HomeScreen(viewModel)
-                    "ADD_TRADE" -> AddTradeScreen(viewModel, editingTrade)
-                    "HISTORY" -> HistoryScreen(viewModel)
-                    "RATES" -> RatesScreen(viewModel)
-                    "SETTINGS" -> SettingsScreen(viewModel)
+                    "HOME" -> HomeScreen(viewModel, { getString(it) })
+                    "ADD_TRADE" -> AddTradeScreen(viewModel, editingTrade, { getString(it) })
+                    "HISTORY" -> HistoryScreen(viewModel, { getString(it) })
+                    "CALENDAR" -> CalendarScreen(viewModel, { getString(it) })
+                    "RATES" -> RatesScreen(viewModel, { getString(it) })
+                    "SETTINGS" -> SettingsScreen(viewModel, { getString(it) })
                 }
             }
         }
     }
 }
 
-// --- Composing format helpers ---
-fun formatSyp(value: Double): String {
-    val df = DecimalFormat("#,###")
+// --- Universal Format Helpers ---
+fun formatSyp(value: Double, code: String = "SYP"): String {
+    val symbols = java.text.DecimalFormatSymbols(Locale.US)
+    val pattern = when (code.uppercase()) {
+        "BTC", "ETH" -> "#,##0.000000"
+        "USDT", "USDC", "USD", "EUR" -> "#,##0.00"
+        else -> "#,###" // Local Syrian Lira / L.S or TRY
+    }
+    val df = DecimalFormat(pattern, symbols)
     return df.format(value)
 }
 
-fun formatUsdt(value: Double): String {
-    val df = DecimalFormat("#,##0.00")
-    return df.format(value)
+fun formatCompactSyp(value: Double): String {
+    return when {
+        Math.abs(value) >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000)
+        Math.abs(value) >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000)
+        else -> String.format(Locale.US, "%.0f", value)
+    }
+}
+
+// Custom reusable Segmented Control view component (Requirement 5)
+@Composable
+fun <T> SegmentedControl(
+    items: List<T>,
+    selectedItem: T,
+    onItemSelection: (T) -> Unit,
+    itemLabel: (T) -> String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(CardColor, shape = RoundedCornerShape(12.dp))
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        items.forEach { item ->
+            val isSelected = item == selectedItem
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .background(
+                        if (isSelected) GoldColor else Color.Transparent,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onItemSelection(item) }
+                    .wrapContentSize(Alignment.Center)
+            ) {
+                Text(
+                    text = itemLabel(item),
+                    color = if (isSelected) Color.Black else TextSecondaryColor,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// Custom Dynamic Dropdown Selector
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CurrencyDropdown(
+    label: String,
+    options: List<String>,
+    selectedOption: String,
+    onOptionSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            readOnly = true,
+            value = selectedOption,
+            onValueChange = {},
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = GoldColor,
+                focusedLabelColor = GoldColor,
+                focusedTextColor = TextColor,
+                unfocusedTextColor = TextColor,
+                unfocusedLabelColor = TextSecondaryColor
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(CardColor)
+        ) {
+            options.forEach { selectionOption ->
+                DropdownMenuItem(
+                    text = { Text(text = selectionOption, color = TextColor) },
+                    onClick = {
+                        onOptionSelected(selectionOption)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 // --- Home Screen View ---
 @Composable
-fun HomeScreen(viewModel: P2PViewModel) {
+fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val context = LocalContext.current
     val trades by viewModel.trades.collectAsState()
     val rates by viewModel.rates.collectAsState()
     val balanceOpt by viewModel.balance.collectAsState()
     val balance = balanceOpt ?: Balance()
 
-    var showBalanceDialog by remember { mutableStateOf(false) }
-
-    // Computations
     val totalSypProfit = trades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
     val totalTradesCount = trades.size
     val maxSingleProfit = if (trades.filter { it.type == "SELL" }.isNotEmpty()) {
@@ -145,15 +267,12 @@ fun HomeScreen(viewModel: P2PViewModel) {
     }
     val totalFeesUsdt = trades.sumOf { it.fee }
 
-    // Today statistics
     val todayStr = viewModel.getTodayString()
     val todayTrades = trades.filter { it.date == todayStr }
     val todayTradesCount = todayTrades.size
     val todaySypProfit = todayTrades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
-    
-    val lastRate = rates.firstOrNull()?.rate ?: 0.0
+    val currentRate = rates.firstOrNull()?.rate ?: 0.0
 
-    // Main layout
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -161,27 +280,27 @@ fun HomeScreen(viewModel: P2PViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // App Header
+        // Aesthetic App Title Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.Default.Star,
+                Icons.Default.TrendingUp,
                 contentDescription = null,
                 tint = GoldColor,
                 modifier = Modifier.size(28.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "تاجر P2P - السوق السورية",
+                text = "${getString(R.string.app_name)} - ${getString(R.string.rates_indicator)}",
                 color = TextColor,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        // Portfolio Card (محفظتي الحالية)
+        // Expanded Multi-Currency Wallet Card (Requirement 2)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -193,115 +312,128 @@ fun HomeScreen(viewModel: P2PViewModel) {
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(
-                    text = "محفظتي الحالية",
-                    color = TextSecondaryColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // SYP Balance
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "رصيد الليرة السورية",
+                        text = getString(R.string.wallet_balances),
                         color = TextSecondaryColor,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = "${formatSyp(balance.balanceSYP)} ل.س",
-                        color = GoldColor,
-                        fontSize = 22.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    IconButton(
+                        onClick = { viewModel.updateBalances(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) }
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = getString(R.string.wipe_wallet),
+                            tint = RedColor.copy(alpha = 0.8f)
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // USDT Balance
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "رصيد الـ USDT",
-                        color = TextSecondaryColor,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = "${formatUsdt(balance.balanceUSDT)} USDT",
-                        color = GreenColor,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Crypto currencies row list
+                Text("Crypto / الرقمية", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                listOf(
+                    "USDT" to balance.balanceUSDT,
+                    "USDC" to balance.balanceUSDC,
+                    "BTC" to balance.balanceBTC,
+                    "ETH" to balance.balanceETH
+                ).forEach { (code, amount) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(code, color = TextColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            "${formatSyp(amount, code)} $code",
+                            color = GreenColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Button(
-                    onClick = { showBalanceDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("edit_balances_button")
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("تعديل الأرصدة يدوياً", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = BgColor, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Fiat currencies list
+                Text("Fiat / المحلية", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(6.dp))
+                listOf(
+                    "SYP" to balance.balanceSYP,
+                    "USD" to balance.balanceUSD,
+                    "TRY" to balance.balanceTRY,
+                    "EUR" to balance.balanceEUR
+                ).forEach { (code, amount) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(code, color = TextColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            "${formatSyp(amount, code)} $code",
+                            color = GoldColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
 
-        // 2x2 KPIs Grid
-        Column(
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        // Merged Fee inside Total profits KPI card (Asymmetric Layout - Requirement 5)
+        KpiCard(
+            title = getString(R.string.total_profits),
+            value = "${formatSyp(totalSypProfit, "SYP")} L.S / ل.س",
+            valueColor = if (totalSypProfit >= 0.0) GreenColor else RedColor,
+            modifier = Modifier.fillMaxWidth(),
+            extraRow = {
+                HorizontalDivider(color = BgColor, modifier = Modifier.padding(vertical = 6.dp), thickness = 0.5.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${getString(R.string.fee)} (USDT):",
+                        color = TextSecondaryColor,
+                        fontSize = 11.sp
+                    )
+                    Text(
+                        text = "${formatSyp(totalFeesUsdt, "USDT")} USDT",
+                        color = RedColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        )
+
+        // Other two KPIs in Grid row below
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Card 1: Net Profit
-                KpiCard(
-                    title = "صافي الربح الكلي",
-                    value = "${formatSyp(totalSypProfit)} ل.س",
-                    valueColor = if (totalSypProfit >= 0) GreenColor else RedColor,
-                    modifier = Modifier.weight(1f)
-                )
-                // Card 2: Total Trades
-                KpiCard(
-                    title = "عدد الصفقات الكلي",
-                    value = "$totalTradesCount صفقة",
-                    valueColor = TextColor,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Card 3: Top Profit
-                KpiCard(
-                    title = "أعلى ربح صفقة",
-                    value = "${formatSyp(maxSingleProfit)} ل.س",
-                    valueColor = GreenColor,
-                    modifier = Modifier.weight(1f)
-                )
-                // Card 4: Total Fees
-                KpiCard(
-                    title = "إجمالي الرسوم",
-                    value = "${formatUsdt(totalFeesUsdt)} USDT",
-                    valueColor = RedColor,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            KpiCard(
+                title = "عدد الصفقات الكلي",
+                value = "$totalTradesCount صفقة",
+                valueColor = TextColor,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                title = "أعلى ربح صفقة",
+                value = "${formatSyp(maxSingleProfit, "SYP")} ل.س",
+                valueColor = GreenColor,
+                modifier = Modifier.weight(1f)
+            )
         }
 
-        // Today's statistics card
+        // Today Active Statistics
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
@@ -311,7 +443,7 @@ fun HomeScreen(viewModel: P2PViewModel) {
                 modifier = Modifier.padding(16.dp)
             ) {
                 Text(
-                    text = "اليوم",
+                    text = getString(R.string.today_trades),
                     color = GoldColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
@@ -322,294 +454,49 @@ fun HomeScreen(viewModel: P2PViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
-                        Text("صفقات اليوم", color = TextSecondaryColor, fontSize = 11.sp)
-                        Text("$todayTradesCount صفقة", color = TextColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("أرباح اليوم", color = TextSecondaryColor, fontSize = 11.sp)
-                        Text(
-                            "${formatSyp(todaySypProfit)} ل.س", 
-                            color = if (todaySypProfit >= 0) GreenColor else RedColor, 
-                            fontSize = 15.sp, 
-                            fontWeight = FontWeight.Bold
-                        )
+                        Text("نشاط اليوم", color = TextSecondaryColor, fontSize = 11.sp)
+                        Text("$todayTradesCount صفقات", color = TextColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("آخر سعر صرف", color = TextSecondaryColor, fontSize = 11.sp)
+                        Text("أرباح اليوم التقديرية", color = TextSecondaryColor, fontSize = 11.sp)
                         Text(
-                            if (lastRate > 0) "${formatSyp(lastRate)} ل.س" else "-", 
-                            color = TextColor, 
-                            fontSize = 15.sp, 
+                            text = "${formatSyp(todaySypProfit, "SYP")} ل.س",
+                            color = if (todaySypProfit >= 0.0) GreenColor else RedColor,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
         }
-
-        // Last 3 trades title and list
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "آخر 3 صفقات",
-                color = TextColor,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "عرض الكل",
-                color = GoldColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .clickable { viewModel.navigateTo("HISTORY") }
-                    .testTag("view_all_trades")
-            )
-        }
-
-        if (trades.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 24.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "لا توجد صفقات مسجلة بعد.",
-                    color = TextSecondaryColor,
-                    fontSize = 14.sp,
-                    textAlign = TextAlign.Center
-                )
-            }
-        } else {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                trades.take(3).forEach { trade ->
-                    TradeBriefItem(trade = trade)
-                }
-            }
-        }
-    }
-
-    // Modal to modify balance
-    if (showBalanceDialog) {
-        var sypInput by remember { mutableStateOf(balance.balanceSYP.toString()) }
-        var usdtInput by remember { mutableStateOf(balance.balanceUSDT.toString()) }
-
-        Dialog(onDismissRequest = { showBalanceDialog = false }) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CardColor),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "تعديل رصيد المحفظة",
-                        color = TextColor,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    
-                    OutlinedTextField(
-                        value = sypInput,
-                        onValueChange = { sypInput = it },
-                        label = { Text("رصيد الليرة السورية SYP") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GoldColor,
-                            focusedLabelColor = GoldColor,
-                            focusedTextColor = TextColor,
-                            unfocusedTextColor = TextColor,
-                            unfocusedLabelColor = TextSecondaryColor
-                        ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("edit_syp_input")
-                    )
-
-                    OutlinedTextField(
-                        value = usdtInput,
-                        onValueChange = { usdtInput = it },
-                        label = { Text("رصيد الـ USDT") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = GoldColor,
-                            focusedLabelColor = GoldColor,
-                            focusedTextColor = TextColor,
-                            unfocusedTextColor = TextColor,
-                            unfocusedLabelColor = TextSecondaryColor
-                        ),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("edit_usdt_input")
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = {
-                                val syp = sypInput.toDoubleOrNull() ?: 0.0
-                                val usdt = usdtInput.toDoubleOrNull() ?: 0.0
-                                viewModel.updateBalances(syp, usdt)
-                                showBalanceDialog = false
-                                Toast.makeText(context, "تم تعديل الرصيد بنجاح", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("save_balances_button")
-                        ) {
-                            Text("حفظ", fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { showBalanceDialog = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                            border = BorderStroke(1.dp, TextSecondaryColor),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("إلغاء")
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
+// --- Add or Edit Trade Screen View (Requirement 2 & 3 & 5) ---
 @Composable
-fun KpiCard(title: String, value: String, valueColor: Color, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = CardColor),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp)
-        ) {
-            Text(
-                text = title,
-                color = TextSecondaryColor,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = value,
-                color = valueColor,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-fun TradeBriefItem(trade: Trade) {
-    val isBuy = trade.type == "BUY"
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = CardColor),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isBuy) GreenColor.copy(alpha = 0.15f) else RedColor.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isBuy) "شراء" else "بيع",
-                        color = if (isBuy) GreenColor else RedColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "${formatUsdt(trade.amount)} USDT",
-                        color = TextColor,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = trade.date,
-                        color = TextSecondaryColor,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "${formatSyp(trade.rate)} ل.س",
-                    color = TextColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (!isBuy) {
-                    Text(
-                        text = "الربح: +${formatSyp(trade.profitSYP)}",
-                        color = GreenColor,
-                        fontSize = 11.sp
-                    )
-                } else {
-                    Text(
-                        text = "الإجمالي: ${formatSyp(trade.totalSYP)}",
-                        color = TextSecondaryColor,
-                        fontSize = 11.sp
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-// --- Add Trade (New or Editing) Screen ---
-@Composable
-fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
+fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (Int) -> String) {
     val context = LocalContext.current
     val todayStr = viewModel.getTodayString()
 
-    // Inputs
+    // Supported multi-currency selection options
+    val cryptos = listOf("USDT", "USDC", "BTC", "ETH")
+    val fiats = listOf("SYP", "USD", "TRY", "EUR")
+
     var type by remember { mutableStateOf(editingTrade?.type ?: "BUY") }
+    var selectedCrypto by remember { mutableStateOf(editingTrade?.cryptoCurrency ?: "USDT") }
+    var selectedFiat by remember { mutableStateOf(editingTrade?.fiatCurrency ?: "SYP") }
     var amountInput by remember { mutableStateOf(editingTrade?.amount?.toString() ?: "") }
     var rateInput by remember { mutableStateOf(editingTrade?.rate?.toString() ?: "") }
     var feeInput by remember { mutableStateOf(editingTrade?.fee?.toString() ?: "") }
     var dateInput by remember { mutableStateOf(editingTrade?.date ?: todayStr) }
     var noteInput by remember { mutableStateOf(editingTrade?.note ?: "") }
+    var customerNameInput by remember { mutableStateOf(editingTrade?.customerName ?: "") }
 
-    // Preview
+    // Instant update preview for items
     val amount = amountInput.toDoubleOrNull() ?: 0.0
     val rate = rateInput.toDoubleOrNull() ?: 0.0
-    val totalLira = amount * rate
+    val totalCalculated = amount * rate
 
-    // Standard DatePickerDialog trigger
     val calendar = Calendar.getInstance()
     val datePickerDialog = DatePickerDialog(
         context,
@@ -630,65 +517,47 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Mode Header
         Text(
-            text = if (editingTrade != null) "تعديل صفقة P2P" else "إضافة صفقة P2P جديدة",
+            text = if (editingTrade != null) getString(R.string.edit_trade) else getString(R.string.add_new_trade),
             color = TextColor,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
 
-        // Type selection toggle buttons
+        // Segmented Control for Buy/Sell instead of duplicate toggles
+        SegmentedControl(
+            items = listOf("BUY", "SELL"),
+            selectedItem = type,
+            onItemSelection = { type = it },
+            itemLabel = { if (it == "BUY") getString(R.string.buy) else getString(R.string.sell) }
+        )
+
+        // Dropdown Spinners for crypto and local currencies
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Button(
-                onClick = { type = "BUY" },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (type == "BUY") GreenColor else CardColor,
-                    contentColor = if (type == "BUY") Color.Black else TextSecondaryColor
-                ),
-                shape = RoundedCornerShape(10.dp),
-                border = if (type != "BUY") BorderStroke(1.dp, TextSecondaryColor.copy(alpha = 0.3f)) else null,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .testTag("type_buy_btn")
-            ) {
-                Text(
-                    text = "🟢 شراء USDT",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-            }
-
-            Button(
-                onClick = { type = "SELL" },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (type == "SELL") RedColor else CardColor,
-                    contentColor = if (type == "SELL") Color.White else TextSecondaryColor
-                ),
-                shape = RoundedCornerShape(10.dp),
-                border = if (type != "SELL") BorderStroke(1.dp, TextSecondaryColor.copy(alpha = 0.3f)) else null,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .testTag("type_sell_btn")
-            ) {
-                Text(
-                    text = "🔴 بيع USDT",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-            }
+            CurrencyDropdown(
+                label = getString(R.string.crypto_currency),
+                options = cryptos,
+                selectedOption = selectedCrypto,
+                onOptionSelected = { selectedCrypto = it },
+                modifier = Modifier.weight(1f)
+            )
+            CurrencyDropdown(
+                label = getString(R.string.fiat_currency),
+                options = fiats,
+                selectedOption = selectedFiat,
+                onOptionSelected = { selectedFiat = it },
+                modifier = Modifier.weight(1f)
+            )
         }
 
-        // Amount input
+        // Amount Input Field
         OutlinedTextField(
             value = amountInput,
             onValueChange = { amountInput = it },
-            label = { Text("كمية الـ USDT") },
+            label = { Text("${getString(R.string.amount)} ($selectedCrypto)") },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
                 focusedLabelColor = GoldColor,
@@ -697,16 +566,14 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                 unfocusedLabelColor = TextSecondaryColor
             ),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("amount_input")
+            modifier = Modifier.fillMaxWidth().testTag("amount_input")
         )
 
-        // Exchange rate input
+        // Exchange Rate Input Field
         OutlinedTextField(
             value = rateInput,
             onValueChange = { rateInput = it },
-            label = { Text("سعر الصرف (ل.س لكل 1 USDT)") },
+            label = { Text("${getString(R.string.exchange_rate)} ($selectedFiat / 1 $selectedCrypto)") },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
                 focusedLabelColor = GoldColor,
@@ -715,12 +582,10 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                 unfocusedLabelColor = TextSecondaryColor
             ),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("rate_input")
+            modifier = Modifier.fillMaxWidth().testTag("rate_input")
         )
 
-        // Instant Preview Block
+        // Visual preview calculations
         if (amountInput.isNotEmpty() && rateInput.isNotEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CardColor),
@@ -728,15 +593,13 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("الإجمالي التقديري بالليرة:", color = TextSecondaryColor, fontSize = 13.sp)
+                    Text(getString(R.string.total_syp_label), color = TextSecondaryColor, fontSize = 13.sp)
                     Text(
-                        "${formatSyp(totalLira)} ل.س",
+                        "${formatSyp(totalCalculated, selectedFiat)} $selectedFiat",
                         color = GoldColor,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold
@@ -745,11 +608,11 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
             }
         }
 
-        // Fee input
+        // Fee input b/currency
         OutlinedTextField(
             value = feeInput,
             onValueChange = { feeInput = it },
-            label = { Text("رسوم الصفقة بـ USDT (اختياري)") },
+            label = { Text("${getString(R.string.fee)} ($selectedCrypto)") },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
                 focusedLabelColor = GoldColor,
@@ -758,20 +621,18 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                 unfocusedLabelColor = TextSecondaryColor
             ),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("fee_input")
+            modifier = Modifier.fillMaxWidth().testTag("fee_input")
         )
 
-        // Date selector input field with icon
+        // Date Picker field
         OutlinedTextField(
             value = dateInput,
             onValueChange = { dateInput = it },
-            label = { Text("تاريخ الصفقة") },
+            label = { Text(getString(R.string.trade_date)) },
             readOnly = true,
             trailingIcon = {
                 IconButton(onClick = { datePickerDialog.show() }) {
-                    Icon(Icons.Default.DateRange, contentDescription = "اختر تاريخ", tint = GoldColor)
+                    Icon(Icons.Default.DateRange, contentDescription = null, tint = GoldColor)
                 }
             },
             colors = OutlinedTextFieldDefaults.colors(
@@ -781,17 +642,15 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                 unfocusedTextColor = TextColor,
                 unfocusedLabelColor = TextSecondaryColor
             ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { datePickerDialog.show() }
-                .testTag("date_picker_trigger")
+            modifier = Modifier.fillMaxWidth().clickable { datePickerDialog.show() }
         )
 
-        // Note input
+        // Customer Name/Note input (Requirement 3)
         OutlinedTextField(
-            value = noteInput,
-            onValueChange = { noteInput = it },
-            label = { Text("ملاحظات (نص اختياري)") },
+            value = customerNameInput,
+            onValueChange = { customerNameInput = it },
+            label = { Text(getString(R.string.customer_name)) },
+            placeholder = { Text(getString(R.string.customer_field_hint)) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
                 focusedLabelColor = GoldColor,
@@ -799,22 +658,34 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                 unfocusedTextColor = TextColor,
                 unfocusedLabelColor = TextSecondaryColor
             ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("note_input")
+            modifier = Modifier.fillMaxWidth().testTag("customer_name_input")
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        // Internal note
+        OutlinedTextField(
+            value = noteInput,
+            onValueChange = { noteInput = it },
+            label = { Text(getString(R.string.note)) },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = GoldColor,
+                focusedLabelColor = GoldColor,
+                focusedTextColor = TextColor,
+                unfocusedTextColor = TextColor,
+                unfocusedLabelColor = TextSecondaryColor
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
 
-        // Save button
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Actions
         Button(
             onClick = {
                 val amt = amountInput.toDoubleOrNull() ?: 0.0
                 val rt = rateInput.toDoubleOrNull() ?: 0.0
                 val fe = feeInput.toDoubleOrNull() ?: 0.0
-
                 if (amt <= 0.0 || rt <= 0.0) {
-                    Toast.makeText(context, "الرجاء إدخال قيم صحيحة للكمية وسعر الصرف", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "الرجاء إدخال الكمية وسعر الصرف بشكل صحيح", Toast.LENGTH_LONG).show()
                 } else {
                     viewModel.saveTrade(
                         type = type,
@@ -822,60 +693,65 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?) {
                         rate = rt,
                         fee = fe,
                         date = dateInput,
-                        note = noteInput
+                        note = noteInput,
+                        crypto = selectedCrypto,
+                        fiat = selectedFiat,
+                        customerName = customerNameInput
                     )
-                    Toast.makeText(context, "تم حفظ الصفقة بنجاح", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "تم حفظ بيانات العملية", Toast.LENGTH_SHORT).show()
                 }
             },
             colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .testTag("save_trade_btn")
+            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("save_trade_btn")
         ) {
-            Text(
-                if (editingTrade != null) "تعديل وحفظ الصفقة" else "حفظ الصفقة",
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
-            )
+            Text(getString(R.string.save_trade_btn), fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
 
-        // Cancel editing button
         if (editingTrade != null) {
             Button(
                 onClick = { viewModel.cancelEditing() },
                 colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
                 border = BorderStroke(1.dp, TextSecondaryColor),
                 shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("cancel_edit_btn")
+                modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
-                Text("إلغاء التعديل")
+                Text(getString(R.string.cancel_btn))
             }
         }
     }
 }
 
-
-// --- Trade History Screen ---
+// --- Trade History Screen View (Requirement 5 & 6) ---
 @Composable
-fun HistoryScreen(viewModel: P2PViewModel) {
+fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val context = LocalContext.current
     val trades by viewModel.trades.collectAsState()
 
-    var activeFilter by remember { mutableStateOf("ALL") } // "ALL", "BUY", "SELL"
+    var activeFilter by remember { mutableStateOf("ALL") }
+    var searchQuery by remember { mutableStateOf("") }
+    
     var tradeToDelete by remember { mutableStateOf<Trade?>(null) }
+    var selectedTradeOptions by remember { mutableStateOf<Trade?>(null) }
 
-    // Filtered lists
-    val filteredTrades = trades.filter {
-        when (activeFilter) {
-            "BUY" -> it.type == "BUY"
-            "SELL" -> it.type == "SELL"
+    // Multi-faceted SearchView filtering (Date, Client, Type, Currency) - Requirement 6
+    val filteredTrades = trades.filter { trade ->
+        val matchesType = when (activeFilter) {
+            "BUY" -> trade.type == "BUY"
+            "SELL" -> trade.type == "SELL"
             else -> true
         }
+        val query = searchQuery.lowercase().trim()
+        val matchesSearch = if (query.isNotEmpty()) {
+            trade.customerName.lowercase().contains(query) ||
+            trade.note.lowercase().contains(query) ||
+            trade.cryptoCurrency.lowercase().contains(query) ||
+            trade.fiatCurrency.lowercase().contains(query) ||
+            trade.date.contains(query)
+        } else {
+            true
+        }
+        matchesType && matchesSearch
     }
 
     Column(
@@ -885,52 +761,54 @@ fun HistoryScreen(viewModel: P2PViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "سجل الصفقات المسجلة",
+            text = getString(R.string.history),
             color = TextColor,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
 
-        // Selector filter buttons
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            val filters = listOf(Pair("ALL", "الكل"), Pair("BUY", "شراء"), Pair("SELL", "بيع"))
-            filters.forEach { (typeKey, label) ->
-                val active = activeFilter == typeKey
-                Button(
-                    onClick = { activeFilter = typeKey },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (active) GoldColor else CardColor,
-                        contentColor = if (active) Color.Black else TextSecondaryColor
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    border = if (!active) BorderStroke(1.dp, TextSecondaryColor.copy(alpha = 0.2f)) else null,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("filter_$typeKey")
-                ) {
-                    Text(label, fontWeight = FontWeight.Bold)
+        // Custom view Segmented Control replace separate duplicate buttons
+        SegmentedControl(
+            items = listOf("ALL", "BUY", "SELL"),
+            selectedItem = activeFilter,
+            onItemSelection = { activeFilter = it },
+            itemLabel = {
+                when (it) {
+                    "BUY" -> getString(R.string.buy)
+                    "SELL" -> getString(R.string.sell)
+                    else -> getString(R.string.all_types)
                 }
             }
-        }
+        )
 
-        // Display results count
-        Text(
-            text = "العناصر المعروضة: ${filteredTrades.size} صفقة",
-            color = TextSecondaryColor,
-            fontSize = 12.sp
+        // Modern SearchView (Requirement 6)
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text(getString(R.string.search_hint)) },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = GoldColor) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Clear, contentDescription = null, tint = TextSecondaryColor)
+                    }
+                }
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = GoldColor,
+                focusedTextColor = TextColor,
+                unfocusedTextColor = TextColor,
+                unfocusedBorderColor = CardColor
+            ),
+            modifier = Modifier.fillMaxWidth().testTag("search_view")
         )
 
         if (filteredTrades.isEmpty()) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text("لا توجد صفقات مطابقة للفلاتر المحددة.", color = TextSecondaryColor)
+                Text("لا توجد عمليات مطابقة لبحثك.", color = TextSecondaryColor)
             }
         } else {
             LazyColumn(
@@ -938,404 +816,223 @@ fun HistoryScreen(viewModel: P2PViewModel) {
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(filteredTrades, key = { it.id }) { trade ->
-                    HistoryTradeItem(
-                        trade = trade,
-                        onEdit = { viewModel.startEditing(trade) },
-                        onDelete = { tradeToDelete = trade }
-                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedTradeOptions = trade }, // Open dialog on click (Requirement 6)
+                        colors = CardDefaults.cardColors(containerColor = CardColor),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, if (trade.type == "BUY") GreenColor.copy(alpha = 0.2f) else RedColor.copy(alpha = 0.2f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val isBuy = trade.type == "BUY"
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                color = if (isBuy) GreenColor.copy(alpha = 0.15f) else RedColor.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(6.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isBuy) "شراء" else "بيع",
+                                            color = if (isBuy) GreenColor else RedColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(trade.date, color = TextSecondaryColor, fontSize = 11.sp)
+                                }
+                                if (trade.customerName.isNotEmpty()) {
+                                    Text(
+                                        text = trade.customerName,
+                                        color = GoldColor,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text("الكمية", color = TextSecondaryColor, fontSize = 11.sp)
+                                    Text("${formatSyp(trade.amount, trade.cryptoCurrency)} ${trade.cryptoCurrency}", color = TextColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("سعر الصرف", color = TextSecondaryColor, fontSize = 11.sp)
+                                    Text("${formatSyp(trade.rate, trade.fiatCurrency)} ${trade.fiatCurrency}", color = TextColor, fontSize = 13.sp)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("النص الخارجي", color = TextSecondaryColor, fontSize = 11.sp)
+                                    val totalVal = trade.amount * trade.rate
+                                    Text("${formatSyp(totalVal, trade.fiatCurrency)} ${trade.fiatCurrency}", color = GoldColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            if (trade.type == "SELL") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(BgColor, shape = RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("صافي الأرباح:", color = TextSecondaryColor, fontSize = 11.sp)
+                                    Text(
+                                        "${formatSyp(trade.profitSYP, "SYP")} SYP",
+                                        color = if (trade.profitSYP >= 0) GreenColor else RedColor,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+
+                            if (trade.note.isNotEmpty()) {
+                                Text(
+                                    text = "ملاحظة: ${trade.note}",
+                                    color = TextSecondaryColor,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // Deletion Dialog
+    // Click trade options dialog (Requirement 6)
+    if (selectedTradeOptions != null) {
+        val selected = selectedTradeOptions!!
+        Dialog(onDismissRequest = { selectedTradeOptions = null }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CardColor),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.padding(16.dp),
+                border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "خيارات العملية",
+                        fontWeight = FontWeight.Bold,
+                        color = TextColor,
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "${if (selected.type == "BUY") "شراء" else "بيع"} ${selected.amount} ${selected.cryptoCurrency} @ ${selected.rate}",
+                        color = TextSecondaryColor,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center
+                    )
+
+                    Button(
+                        onClick = {
+                            viewModel.startEditing(selected)
+                            selectedTradeOptions = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("تعديل تفاصيل الصفقة", fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            tradeToDelete = selected
+                            selectedTradeOptions = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedColor, contentColor = Color.White),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("حذف الصفقة نهائياً", fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = { selectedTradeOptions = null },
+                        border = BorderStroke(1.dp, TextSecondaryColor),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        Text(getString(R.string.close), color = TextColor)
+                    }
+                }
+            }
+        }
+    }
+
+    // Delete confirm popup
     if (tradeToDelete != null) {
-        val tradeObj = tradeToDelete!!
+        val t = tradeToDelete!!
         AlertDialog(
             onDismissRequest = { tradeToDelete = null },
-            title = { Text("تأكيد الحذف", fontWeight = FontWeight.Bold) },
-            text = { 
-                Text(
-                    text = "هل أنت متأكد من رغبتك في حذف هذه الصفقة؟\n" +
-                           "سيؤدي ذلك إلى تعديل الأرصدة التلقائية وإعادة توازن العمليات.",
-                    color = TextColor
-                ) 
-            },
+            title = { Text(getString(R.string.delete_confirm_title), fontWeight = FontWeight.Bold) },
+            text = { Text(getString(R.string.delete_confirm_msg), color = TextColor) },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteTrade(tradeObj)
+                        viewModel.deleteTrade(t)
                         tradeToDelete = null
-                        Toast.makeText(context, "تم حذف الصفقة", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "تم الحذف واسترداد تأثير المحفظة", Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RedColor)
                 ) {
-                    Text("حذف", color = Color.White)
+                    Text("حذف فعلي")
                 }
             },
             dismissButton = {
                 Button(
                     onClick = { tradeToDelete = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, TextSecondaryColor)
+                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor)
                 ) {
-                    Text("إلغاء")
+                    Text(getString(R.string.cancel_btn))
                 }
-            },
-            containerColor = CardColor,
-            titleContentColor = TextColor,
-            textContentColor = TextColor
+            }
         )
     }
 }
 
+// --- Exchange Rates Screen with MPAndroidChart line-graph (Requirement 2 & 4) ---
 @Composable
-fun HistoryTradeItem(trade: Trade, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val isBuy = trade.type == "BUY"
-    val accentColor = if (isBuy) GreenColor else RedColor
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("trade_card_${trade.id}"),
-        colors = CardDefaults.cardColors(containerColor = CardColor),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            // Color Sidebar
-            Box(
-                modifier = Modifier
-                    .width(6.dp)
-                    .fillMaxHeight()
-                    .background(accentColor)
-                    .align(Alignment.CenterVertically)
-            )
-
-            Column(
-                modifier = Modifier
-                    .padding(14.dp)
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Top line: Operation type, Date, Note
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (isBuy) "🟢 شراء USDT" else "🔴 بيع USDT",
-                            color = accentColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = trade.date,
-                            color = TextSecondaryColor,
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    // Action buttons
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Edit, contentDescription = "تعديل", tint = GoldColor, modifier = Modifier.size(16.dp))
-                        }
-                        IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Delete, contentDescription = "حذف", tint = RedColor, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                }
-
-                // Note if present
-                if (trade.note.isNotEmpty()) {
-                    Text(
-                        text = "ملاحظة: ${trade.note}",
-                        color = TextColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        modifier = Modifier.background(BgColor.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 4.dp)
-                    )
-                }
-
-                // Grid Details: Quantity, Rate, Total
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text("الكمية", color = TextSecondaryColor, fontSize = 11.sp)
-                        Text("${formatUsdt(trade.amount)} USDT", color = TextColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("السعر", color = TextSecondaryColor, fontSize = 11.sp)
-                        Text("${formatSyp(trade.rate)} ل.س", color = TextColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("الإجمالي", color = TextSecondaryColor, fontSize = 11.sp)
-                        Text("${formatSyp(trade.totalSYP)} ل.س", color = GoldColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // Fees
-                if (trade.fee > 0.0) {
-                    val feeEqLira = trade.fee * trade.rate
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(BgColor, RoundedCornerShape(6.dp))
-                            .padding(8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("الرسوم الفعالة:", color = TextSecondaryColor, fontSize = 11.sp)
-                        Text("${formatUsdt(trade.fee)} USDT (~${formatSyp(feeEqLira)} ل.س)", color = RedColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    }
-                }
-
-                // Profit Box for SELL only
-                if (!isBuy) {
-                    val sideBuyRateStr = if (trade.avgBuyRate > 0) formatSyp(trade.avgBuyRate) else "غير محدد"
-                    val profitPositive = trade.profitSYP >= 0.0
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                if (profitPositive) GreenColor.copy(alpha = 0.12f) else RedColor.copy(alpha = 0.12f),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .border(
-                                1.dp,
-                                if (profitPositive) GreenColor.copy(alpha = 0.3f) else RedColor.copy(alpha = 0.3f),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("العمليات (متوسط شراء: $sideBuyRateStr ← بيع: ${formatSyp(trade.rate)})", color = TextSecondaryColor, fontSize = 11.sp)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("العائد المالي الصافي:", color = TextColor, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            Text(
-                                text = "${if (profitPositive) "+" else ""}${formatSyp(trade.profitSYP)} ل.س",
-                                color = if (profitPositive) GreenColor else RedColor,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-// --- Exchange Rates Screen ---
-@Composable
-fun RatesScreen(viewModel: P2PViewModel) {
+fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val context = LocalContext.current
     val rates by viewModel.rates.collectAsState()
 
+    val cryptos = listOf("USDT", "USDC", "BTC", "ETH")
+    val fiats = listOf("SYP", "USD", "TRY", "EUR")
+
     var rateInput by remember { mutableStateOf("") }
-    var typeSelector by remember { mutableStateOf("BUY") } // "BUY", "SELL"
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "متابعة أسعار صرف العملات",
-            color = TextColor,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        // Add rate form card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "تسجيل سعر صرف جديد",
-                    color = GoldColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                OutlinedTextField(
-                    value = rateInput,
-                    onValueChange = { rateInput = it },
-                    label = { Text("سعر الصرف (ل.س لـ 1 USDT)") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GoldColor,
-                        focusedLabelColor = GoldColor,
-                        focusedTextColor = TextColor,
-                        unfocusedTextColor = TextColor,
-                        unfocusedLabelColor = TextSecondaryColor
-                    ),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("نوع السعر:", color = TextSecondaryColor, fontSize = 13.sp)
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { typeSelector = "BUY" },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (typeSelector == "BUY") GreenColor else BgColor,
-                                contentColor = if (typeSelector == "BUY") Color.Black else TextSecondaryColor
-                            ),
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(1.dp, TextSecondaryColor.copy(alpha = 0.3f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("شراء")
-                        }
-
-                        Button(
-                            onClick = { typeSelector = "SELL" },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (typeSelector == "SELL") RedColor else BgColor,
-                                contentColor = if (typeSelector == "SELL") Color.White else TextSecondaryColor
-                            ),
-                            shape = RoundedCornerShape(6.dp),
-                            border = BorderStroke(1.dp, TextSecondaryColor.copy(alpha = 0.3f)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("بيع")
-                        }
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        val rt = rateInput.toDoubleOrNull() ?: 0.0
-                        if (rt <= 0.0) {
-                            Toast.makeText(context, "الرجاء إدخال قيمة صحيحة لسعر الصرف", Toast.LENGTH_SHORT).show()
-                        } else {
-                            viewModel.addExchangeRate(rt, typeSelector)
-                            rateInput = ""
-                            Toast.makeText(context, "تم حفظ سعر الصرف بنجاح", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("إضافة السعر الحالي", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // List Header
-        Text(
-            text = "آخر 30 سعر مسجل",
-            color = TextColor,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        // List
-        if (rates.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("لا توجد أسعار صرف مسجلة بعد.", color = TextSecondaryColor)
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(rates, key = { it.id }) { rate ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = CardColor),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(if (rate.type == "BUY") GreenColor.copy(alpha = 0.15f) else RedColor.copy(alpha = 0.15f))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = if (rate.type == "BUY") "شراء" else "بيع",
-                                        color = if (rate.type == "BUY") GreenColor else RedColor,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(rate.date, color = TextSecondaryColor, fontSize = 11.sp)
-                            }
-                            Text("${formatSyp(rate.rate)} ل.س", color = GoldColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-// --- Settings Screen ---
-@Composable
-fun SettingsScreen(viewModel: P2PViewModel) {
-    val context = LocalContext.current
-    val balanceOpt by viewModel.balance.collectAsState()
-    val balance = balanceOpt ?: Balance()
-
-    var showClipboardDialog by remember { mutableStateOf(false) }
-    var clipboardContent by remember { mutableStateOf("") }
-    var clipboardDialogTitle by remember { mutableStateOf("") }
-
-    var importText by remember { mutableStateOf("") }
-
-    // Wiping confirmation triggers
-    var showWipeConfirm1 by remember { mutableStateOf(false) }
-    var showWipeConfirm2 by remember { mutableStateOf(false) }
+    var typeSelector by remember { mutableStateOf("BUY") }
+    var selectedCrypto by remember { mutableStateOf("USDT") }
+    var selectedFiat by remember { mutableStateOf("SYP") }
 
     Column(
         modifier = Modifier
@@ -1345,137 +1042,16 @@ fun SettingsScreen(viewModel: P2PViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = "إعدادات التطبيق الخلفية",
+            text = getString(R.string.rates_today),
             color = TextColor,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
 
-        // Section 1: Data Backup and Sharing
+        // Dropdowns for currency selection
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "النسخ الاحتياطي ومشاركة البيانات",
-                    color = GoldColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // JSON Backup Export
-                Button(
-                    onClick = {
-                        val json = viewModel.generateBackupJson()
-                        clipboardContent = json
-                        clipboardDialogTitle = "نسخة احتياطية كاملة (JSON)"
-                        showClipboardDialog = true
-
-                        // Copy directly to clipboard
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("P2P_BackupJSON", json)
-                        clipboard.setPrimaryClip(clip)
-                        Toast.makeText(context, "تم توليد النسخ ونسخه للحافظة تلقائياً!", Toast.LENGTH_SHORT).show()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, GoldColor),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("تصدير نسخة احتياطية (JSON)", fontWeight = FontWeight.Medium)
-                }
-
-                // CSV Export (Excel)
-                Button(
-                    onClick = {
-                        val csv = viewModel.generateCSV()
-                        
-                        // Direct native Share Sheet for CSV string
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, csv)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "مشاركة تقرير صفقات CSV للأكسل"))
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, GoldColor),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.List, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("مشاركة تقرير صفقات مميز (CSV)", fontWeight = FontWeight.Medium)
-                }
-            }
-        }
-
-        // Section 2: Backup Import
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "استيراد نسخة احتياطية (JSON)",
-                    color = GoldColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                OutlinedTextField(
-                    value = importText,
-                    onValueChange = { importText = it },
-                    placeholder = { Text("قُم بلصق رمز النسخ JSON هنا...") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GoldColor,
-                        focusedLabelColor = GoldColor,
-                        focusedTextColor = TextColor,
-                        unfocusedTextColor = TextColor,
-                        unfocusedLabelColor = TextSecondaryColor
-                    ),
-                    maxLines = 5,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(110.dp)
-                )
-
-                Button(
-                    onClick = {
-                        if (importText.trim().isEmpty()) {
-                            Toast.makeText(context, "الرجاء لصق كود JSON صحيح للاستيراد", Toast.LENGTH_SHORT).show()
-                        } else {
-                            val success = viewModel.importBackupJson(importText)
-                            if (success) {
-                                importText = ""
-                                Toast.makeText(context, "تم استعادة البيانات والنسخة بنجاح!", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(context, "فشل الاستيراد! تأكد من سلامة هيكلية كود الـ JSON", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("استيراد البيانات واستعادة الأرصدة", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
-        // Section 3: Risk Zone - Wipe Data
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = CardColor),
-            border = BorderStroke(1.dp, RedColor.copy(alpha = 0.4f)),
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(
@@ -1483,44 +1059,523 @@ fun SettingsScreen(viewModel: P2PViewModel) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "منطقة الخطر المميتة",
-                    color = RedColor,
+                    text = getString(R.string.add_rate_desc),
+                    color = GoldColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "تحذير: سيؤدي هذا الخيار إلى مسح كل الصفقات وأسعار الصرف وتصفير أرصدة المحفظة تماماً بشكل غير قابل للتراجع.",
-                    color = TextSecondaryColor,
-                    fontSize = 11.sp
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    CurrencyDropdown(
+                        label = getString(R.string.crypto_currency),
+                        options = cryptos,
+                        selectedOption = selectedCrypto,
+                        onOptionSelected = { selectedCrypto = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    CurrencyDropdown(
+                        label = getString(R.string.fiat_currency),
+                        options = fiats,
+                        selectedOption = selectedFiat,
+                        onOptionSelected = { selectedFiat = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = rateInput,
+                    onValueChange = { rateInput = it },
+                    label = { Text("${getString(R.string.rate_value)} ($selectedFiat/1 $selectedCrypto)") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldColor,
+                        focusedLabelColor = GoldColor,
+                        focusedTextColor = TextColor,
+                        unfocusedTextColor = TextColor
+                    ),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Types toggle Segmented Control
+                SegmentedControl(
+                    items = listOf("BUY", "SELL"),
+                    selectedItem = typeSelector,
+                    onItemSelection = { typeSelector = it },
+                    itemLabel = { if (it == "BUY") getString(R.string.buy) else getString(R.string.sell) }
                 )
 
                 Button(
-                    onClick = { showWipeConfirm1 = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = RedColor, contentColor = Color.White),
+                    onClick = {
+                        val rt = rateInput.toDoubleOrNull() ?: 0.0
+                        if (rt <= 0.0) {
+                            Toast.makeText(context, "الرجاء كُتابة سعر صرف صالح.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.addExchangeRate(rt, typeSelector, selectedCrypto, selectedFiat)
+                            rateInput = ""
+                            Toast.makeText(context, "تم تسجيل مؤشر السعر التقديري بنجاح", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("مسح جميع البيانات", fontWeight = FontWeight.Bold)
+                    Text(getString(R.string.add_rate_btn), fontWeight = FontWeight.Bold)
                 }
             }
         }
+
+        // Subtitle line chart replaces last 30 list (Requirement 4)
+        Text(
+            text = getString(R.string.custom_rates_chart),
+            color = TextColor,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        // Plotting Line graph with MPAndroidChart wrapper
+        RatesLineChart(
+            rates = rates,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
+
+// MPAndroidChart lines wrapper in Dark slate colors (Requirement 4)
+@Composable
+fun RatesLineChart(rates: List<ExchangeRate>, modifier: Modifier = Modifier) {
+    if (rates.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxWidth().height(180.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("لا تتوفر حركة كافية لرسّ السعر بياناً حالياً.", color = TextSecondaryColor, fontSize = 12.sp)
+        }
+        return
     }
 
-    // Modal to display JSON for copy backup safety
-    if (showClipboardDialog) {
-        Dialog(onDismissRequest = { showClipboardDialog = false }) {
+    // Sort chronologically ascending
+    val sortedRates = rates.sortedBy { it.timestamp }
+    val buyEntries = ArrayList<Entry>()
+    val sellEntries = ArrayList<Entry>()
+
+    sortedRates.forEachIndexed { idx, rate ->
+        val xVal = idx.toFloat()
+        val yVal = rate.rate.toFloat()
+        if (rate.type == "BUY") {
+            buyEntries.add(Entry(xVal, yVal))
+        } else {
+            sellEntries.add(Entry(xVal, yVal))
+        }
+    }
+
+    AndroidView(
+        factory = { context ->
+            LineChart(context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                description.isEnabled = false
+                setTouchEnabled(true)
+                isDragEnabled = true
+                setScaleEnabled(true)
+                setPinchZoom(true)
+                setDrawGridBackground(false)
+                setBackgroundColor(AndroidColor.TRANSPARENT)
+                legend.textColor = AndroidColor.WHITE
+                legend.textSize = 10f
+
+                xAxis.apply {
+                    textColor = AndroidColor.LTGRAY
+                    gridColor = AndroidColor.DKGRAY
+                    position = XAxis.XAxisPosition.BOTTOM
+                    setDrawLabels(true)
+                    valueFormatter = object : ValueFormatter() {
+                        override fun getFormattedValue(value: Float): String {
+                            val idx = value.toInt()
+                            if (idx >= 0 && idx < sortedRates.size) {
+                                val fullDate = sortedRates[idx].date
+                                return if (fullDate.length > 10) fullDate.substring(5, 10) else fullDate
+                            }
+                            return ""
+                        }
+                    }
+                }
+
+                axisLeft.apply {
+                    textColor = AndroidColor.LTGRAY
+                    gridColor = AndroidColor.DKGRAY
+                    setDrawGridLines(true)
+                }
+
+                axisRight.isEnabled = false
+            }
+        },
+        update = { chart ->
+            val dataSets = ArrayList<LineDataSet>()
+            if (buyEntries.isNotEmpty()) {
+                val buySet = LineDataSet(buyEntries, "طلب شراء / BUY").apply {
+                    color = AndroidColor.GREEN
+                    setCircleColor(AndroidColor.GREEN)
+                    lineWidth = 2f
+                    circleRadius = 3f
+                    setDrawCircleHole(false)
+                    valueTextColor = AndroidColor.WHITE
+                    setDrawValues(false)
+                }
+                dataSets.add(buySet)
+            }
+            if (sellEntries.isNotEmpty()) {
+                val sellSet = LineDataSet(sellEntries, "عرض بيع / SELL").apply {
+                    color = AndroidColor.RED
+                    setCircleColor(AndroidColor.RED)
+                    lineWidth = 2f
+                    circleRadius = 3f
+                    setDrawCircleHole(false)
+                    valueTextColor = AndroidColor.WHITE
+                    setDrawValues(false)
+                }
+                dataSets.add(sellSet)
+            }
+            if (dataSets.isNotEmpty()) {
+                chart.data = LineData(dataSets.toList())
+                chart.invalidate()
+            }
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .background(CardColor, shape = RoundedCornerShape(12.dp))
+            .padding(10.dp)
+    )
+}
+
+// --- Dynamic Monthly Profits Calendar & Charts (Requirement 4 & 7) ---
+@Composable
+fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
+    val context = LocalContext.current
+    val trades by viewModel.trades.collectAsState()
+
+    var currentYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
+    var currentMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
+    var selectedDayDetails by remember { mutableStateOf<Pair<String, List<Trade>>?>(null) }
+
+    val monthNamesArabic = listOf(
+        "كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران",
+        "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"
+    )
+
+    val yearStr = String.format(Locale.US, "%04d", currentYear)
+    val monthStr = String.format(Locale.US, "%02d", currentMonth + 1)
+    val targetPrefix = "$yearStr-$monthStr"
+
+    val monthlyTrades = trades.filter { it.date.startsWith(targetPrefix) }
+    val workingDaysCount = monthlyTrades.map { it.date }.toSet().size
+    val monthlyProfit = monthlyTrades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
+
+    // Advanced computed stats (Requirement 7)
+    val monthlySellTradesCount = monthlyTrades.count { it.type == "SELL" }
+    val avgProfitPerTrade = if (monthlySellTradesCount > 0) monthlyProfit / monthlySellTradesCount else 0.0
+
+    val profitByDate = monthlyTrades.filter { it.type == "SELL" }
+        .groupBy { it.date }
+        .mapValues { (_, dayList) -> dayList.sumOf { it.profitSYP } }
+    
+    val bestDayVal = profitByDate.maxOfOrNull { it.value } ?: 0.0
+    val worstDayVal = profitByDate.minOfOrNull { it.value } ?: 0.0
+
+    val bestDayStr = profitByDate.maxByOrNull { it.value }?.key ?: "-"
+    val worstDayStr = profitByDate.minByOrNull { it.value }?.key ?: "-"
+
+    val totalInvestedFiat = monthlyTrades.filter { it.type == "BUY" }.sumOf { it.amount * it.rate }
+    val roi = if (totalInvestedFiat > 0.0) (monthlyProfit / totalInvestedFiat) * 100.0 else 0.0
+
+    val firstDayCal = Calendar.getInstance().apply {
+        set(Calendar.YEAR, currentYear)
+        set(Calendar.MONTH, currentMonth)
+        set(Calendar.DAY_OF_MONTH, 1)
+    }
+    val firstDayOfWeek = firstDayCal.get(Calendar.DAY_OF_WEEK)
+    val maxDays = firstDayCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+    val startOffset = when (firstDayOfWeek) {
+        Calendar.SATURDAY -> 0
+        Calendar.SUNDAY -> 1
+        Calendar.MONDAY -> 2
+        Calendar.TUESDAY -> 3
+        Calendar.WEDNESDAY -> 4
+        Calendar.THURSDAY -> 5
+        Calendar.FRIDAY -> 6
+        else -> 0
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.DateRange,
+                contentDescription = null,
+                tint = GoldColor,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = getString(R.string.monthly_profit_calendar),
+                color = TextColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Calendar Month Controller Header
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(14.dp),
+            border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.2f))
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    if (currentMonth == 0) {
+                        currentMonth = 11
+                        currentYear -= 1
+                    } else {
+                        currentMonth -= 1
+                    }
+                }) {
+                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Prev", tint = GoldColor)
+                }
+
+                Text(
+                    text = "${monthNamesArabic[currentMonth]} $currentYear",
+                    color = TextColor,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                IconButton(onClick = {
+                    if (currentMonth == 11) {
+                        currentMonth = 0
+                        currentYear += 1
+                    } else {
+                        currentMonth += 1
+                    }
+                }) {
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next", tint = GoldColor)
+                }
+            }
+        }
+
+        // First row of KPIs: working days & profit sum
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            KpiCard(
+                title = getString(R.string.working_days_count),
+                value = "$workingDaysCount يوم",
+                valueColor = GoldColor,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                title = getString(R.string.monthly_profit_total),
+                value = "${formatSyp(monthlyProfit, "SYP")} SP",
+                valueColor = if (monthlyProfit >= 0.0) GreenColor else RedColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Second row of KPIs (Advanced metrics - Requirement 7)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            KpiCard(
+                title = getString(R.string.avg_profit),
+                value = "${formatSyp(avgProfitPerTrade, "SYP")} SP",
+                valueColor = GreenColor,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                title = getString(R.string.roi_label),
+                value = String.format(Locale.US, "%.2f%%", roi),
+                valueColor = GoldColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Third row: best vs worst days
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            KpiCard(
+                title = "${getString(R.string.best_day)} ($bestDayStr)",
+                value = "${formatSyp(bestDayVal, "SYP")} SP",
+                valueColor = GreenColor,
+                modifier = Modifier.weight(1f)
+            )
+            KpiCard(
+                title = "${getString(R.string.worst_day)} ($worstDayStr)",
+                value = "${formatSyp(worstDayVal, "SYP")} SP",
+                valueColor = RedColor,
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        // Calendar Grid Layout
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val daysOfWeekAr = listOf("سبت", "أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    daysOfWeekAr.forEach { d ->
+                        Text(
+                            text = d,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            color = TextSecondaryColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                val totalCells = startOffset + maxDays
+                val allCells = (1..startOffset).map { -1 } + (1..maxDays).toList()
+                val weeks = allCells.chunked(7)
+
+                weeks.forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        for (dayNum in week) {
+                            if (dayNum != -1) {
+                                val cellDate = String.format(Locale.US, "%04d-%02d-%02d", currentYear, currentMonth + 1, dayNum)
+                                val dayTrades = monthlyTrades.filter { it.date == cellDate }
+                                val isWorkDay = dayTrades.isNotEmpty()
+                                val dayProfit = dayTrades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isWorkDay) GoldColor.copy(alpha = 0.15f) else BgColor)
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (isWorkDay) GoldColor.copy(alpha = 0.4f) else BgColor,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable {
+                                            if (isWorkDay) {
+                                                selectedDayDetails = Pair(cellDate, dayTrades)
+                                            } else {
+                                                Toast.makeText(context, "لا صفقات مسجلة للفحص اليوم $dayNum", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = dayNum.toString(),
+                                            color = if (isWorkDay) GoldColor else TextColor,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isWorkDay) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                        if (isWorkDay) {
+                                            if (dayProfit != 0.0) {
+                                                Text(
+                                                    text = formatCompactSyp(dayProfit),
+                                                    color = if (dayProfit >= 0.0) GreenColor else RedColor,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            } else {
+                                                if (dayTrades.any { it.type == "BUY" }) {
+                                                    Text("شراء📥", color = GreenColor, fontSize = 8.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
+                            }
+                        }
+                        if (week.size < 7) {
+                            for (i in 0 until (7 - week.size)) {
+                                Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Daily profits trend line graph below (Requirement 4)
+        Text(
+            text = "تدرج الربح الصافي اليومي للمبيعات (ل.س)",
+            color = TextColor,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        MonthlyProfitChart(
+            monthlyTrades = monthlyTrades,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    // Day Details Dialog popup
+    if (selectedDayDetails != null) {
+        val (dayPicked, tradesList) = selectedDayDetails!!
+        Dialog(onDismissRequest = { selectedDayDetails = null }) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CardColor),
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp)
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = clipboardDialogTitle,
+                        text = "${getString(R.string.detailed_day_trades)}: $dayPicked",
                         color = TextColor,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
@@ -1528,113 +1583,549 @@ fun SettingsScreen(viewModel: P2PViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .background(BgColor, RoundedCornerShape(8.dp))
-                            .verticalScroll(rememberScrollState())
-                            .padding(8.dp)
-                    ) {
-                        Text(
-                            text = clipboardContent,
-                            color = TextSecondaryColor,
-                            fontSize = 11.sp
-                        )
+                    HorizontalDivider(color = TextSecondaryColor.copy(alpha = 0.2f))
+
+                    Box(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(tradesList) { trade ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(BgColor, shape = RoundedCornerShape(8.dp))
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = if (trade.type == "BUY") "شراء / BUY" else "بيع / SELL",
+                                            color = if (trade.type == "BUY") GreenColor else RedColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                        Text("${trade.amount} ${trade.cryptoCurrency} @ ${trade.rate}", color = TextSecondaryColor, fontSize = 11.sp)
+                                    }
+                                    if (trade.type == "SELL") {
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text("الربح", color = TextSecondaryColor, fontSize = 10.sp)
+                                            Text("+${formatSyp(trade.profitSYP, "SYP")}", color = GreenColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    Row(
+                    OutlinedButton(
+                        onClick = { selectedDayDetails = null },
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, TextSecondaryColor)
                     ) {
-                        Button(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("P2P_Export_JSON", clipboardContent)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "تم النسخ للحافظة!", Toast.LENGTH_SHORT).show()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("نسخ الكود", fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { showClipboardDialog = false },
-                            colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                            border = BorderStroke(1.dp, TextSecondaryColor),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("إغلاق")
-                        }
+                        Text(getString(R.string.close), color = TextColor)
                     }
                 }
             }
         }
     }
+}
 
-    // --- Double Confirmation wiping dialogues ---
-    if (showWipeConfirm1) {
-        AlertDialog(
-            onDismissRequest = { showWipeConfirm1 = false },
-            title = { Text("تأكيد الحذف الأول (1/2)", fontWeight = FontWeight.Bold, color = RedColor) },
-            text = { Text("هل أنت متأكد تماماً من رغبتك في حذف وحذف كل صفقات وبيانات هذا التطبيق؟ سيتم فقدان كل شيء.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showWipeConfirm1 = false
-                        showWipeConfirm2 = true
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = RedColor)
-                ) {
-                    Text("نعم، تابع للخطوة التالية", color = Color.White)
-                }
-            },
-            dismissButton = {
-                Button(
-                    onClick = { showWipeConfirm1 = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, TextSecondaryColor)
-                ) {
-                    Text("تراجع")
-                }
-            },
-            containerColor = CardColor,
-            titleContentColor = TextColor,
-            textContentColor = TextColor
-        )
+// MPAndroidChart lines wrapper in Dark slate colors (Requirement 4)
+@Composable
+fun MonthlyProfitChart(monthlyTrades: List<Trade>, modifier: Modifier = Modifier) {
+    val dailyProfits = monthlyTrades.filter { it.type == "SELL" }
+        .groupBy { it.date }
+        .mapValues { (_, dayList) -> dayList.sumOf { it.profitSYP } }
+        .toList()
+        .sortedBy { it.first }
+
+    if (dailyProfits.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxWidth().height(160.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("لا تتوفر أرباح مسجلة هذا الشهر للرسم.", color = TextSecondaryColor, fontSize = 12.sp)
+        }
+        return
     }
 
-    if (showWipeConfirm2) {
-        AlertDialog(
-            onDismissRequest = { showWipeConfirm2 = false },
-            title = { Text("التأكيد الأخير الحاسم (2/2)", fontWeight = FontWeight.Bold, color = RedColor) },
-            text = { Text("تأكيد أخير: لا يمكن التراجع أبداً بعد تفعيل هذا الأمر. هل تريد بالفعل إفراغ قاعدة البيانات كلياً وتصفير الأرصدة؟") },
-            confirmButton = {
+    val entries = ArrayList<Entry>()
+    dailyProfits.forEachIndexed { index, pair ->
+        entries.add(Entry(index.toFloat(), pair.second.toFloat()))
+    }
+
+    AndroidView(
+        factory = { context ->
+            LineChart(context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                description.isEnabled = false
+                setTouchEnabled(true)
+                isDragEnabled = true
+                setScaleEnabled(true)
+                setPinchZoom(true)
+                setDrawGridBackground(false)
+                setBackgroundColor(AndroidColor.TRANSPARENT)
+                legend.textColor = AndroidColor.WHITE
+                legend.textSize = 10f
+
+                xAxis.apply {
+                    textColor = AndroidColor.LTGRAY
+                    gridColor = AndroidColor.DKGRAY
+                    position = XAxis.XAxisPosition.BOTTOM
+                    setDrawLabels(true)
+                    valueFormatter = object : ValueFormatter() {
+                        override fun getFormattedValue(value: Float): String {
+                            val idx = value.toInt()
+                            if (idx >= 0 && idx < dailyProfits.size) {
+                                val fullDate = dailyProfits[idx].first
+                                return if (fullDate.length >= 10) fullDate.substring(8) else fullDate
+                            }
+                            return ""
+                        }
+                    }
+                }
+
+                axisLeft.apply {
+                    textColor = AndroidColor.LTGRAY
+                    gridColor = AndroidColor.DKGRAY
+                    setDrawGridLines(true)
+                }
+
+                axisRight.isEnabled = false
+            }
+        },
+        update = { chart ->
+            if (entries.isNotEmpty()) {
+                val dataSet = LineDataSet(entries, "أرباح يومية / Profits").apply {
+                    color = AndroidColor.YELLOW
+                    setCircleColor(AndroidColor.YELLOW)
+                    lineWidth = 2f
+                    circleRadius = 3f
+                    setDrawCircleHole(false)
+                    valueTextColor = AndroidColor.WHITE
+                    setDrawValues(false)
+                }
+                chart.data = LineData(dataSet)
+                chart.invalidate()
+            }
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .background(CardColor, shape = RoundedCornerShape(12.dp))
+            .padding(10.dp)
+    )
+}
+
+// --- KPI Card Widget with Optional Subtitle/Row (Requirement 5) ---
+@Composable
+fun KpiCard(
+    title: String,
+    value: String,
+    valueColor: Color,
+    modifier: Modifier = Modifier,
+    extraRow: @Composable (() -> Unit)? = null
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = CardColor),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = title,
+                color = TextSecondaryColor,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                color = valueColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (extraRow != null) {
+                extraRow()
+            }
+        }
+    }
+}
+
+// --- Settings Screen (Language + Multi-Currency Balance Custom Editor - Requirement 1 & 2) ---
+@Composable
+fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
+    val context = LocalContext.current
+    val langState by viewModel.language.collectAsState()
+    val balanceOpt by viewModel.balance.collectAsState()
+    val balance = balanceOpt ?: Balance()
+
+    var showBalanceEditor by remember { mutableStateOf(false) }
+
+    // Backup states
+    var backupCodeToImport by remember { mutableStateOf("") }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.Settings,
+                contentDescription = null,
+                tint = GoldColor,
+                modifier = Modifier.size(28.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = getString(R.string.settings),
+                color = TextColor,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Language Section (Requirement 1)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = getString(R.string.app_language),
+                    fontWeight = FontWeight.Bold,
+                    color = GoldColor,
+                    fontSize = 14.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { viewModel.setLanguage("ar") },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (langState == "ar") GoldColor else BgColor,
+                            contentColor = if (langState == "ar") Color.Black else TextSecondaryColor
+                        ),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(getString(R.string.arabic), fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = { viewModel.setLanguage("en") },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (langState == "en") GoldColor else BgColor,
+                            contentColor = if (langState == "en") Color.Black else TextSecondaryColor
+                        ),
+                        modifier = Modifier.weight(1f).height(40.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(getString(R.string.english), fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Multi-currency balance editor button (Requirement 2 & 5 reorder)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "التحكم اليدوي ورأس المال",
+                    fontWeight = FontWeight.Bold,
+                    color = GoldColor,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "قم بتعديل رأس المال المبدئي والأرصدة لجميع العملات الرقمية والمحلية يدوياً في أي وقت.",
+                    color = TextSecondaryColor,
+                    fontSize = 12.sp
+                )
+                Button(
+                    onClick = { showBalanceEditor = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(getString(R.string.manual_balance_title), fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // Backup & sharing
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = getString(R.string.backup_share),
+                    fontWeight = FontWeight.Bold,
+                    color = GoldColor,
+                    fontSize = 14.sp
+                )
+
+                Button(
+                    onClick = { viewModel.exportBackup(context) },
+                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
+                    border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(getString(R.string.export_json))
+                }
+
+                Button(
+                    onClick = { viewModel.exportCSVReport(context) },
+                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
+                    border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Description, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(getString(R.string.export_csv))
+                }
+
+                HorizontalDivider(color = BgColor, modifier = Modifier.padding(vertical = 4.dp))
+
+                Text(
+                    text = getString(R.string.import_json),
+                    fontWeight = FontWeight.Bold,
+                    color = TextColor,
+                    fontSize = 12.sp
+                )
+
+                OutlinedTextField(
+                    value = backupCodeToImport,
+                    onValueChange = { backupCodeToImport = it },
+                    placeholder = { Text(getString(R.string.import_paste_hint), fontSize = 11.sp) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = GoldColor,
+                        focusedTextColor = TextColor,
+                        unfocusedTextColor = TextColor
+                    ),
+                    modifier = Modifier.fillMaxWidth().height(80.dp),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
+                )
+
                 Button(
                     onClick = {
-                        viewModel.clearAllData()
-                        showWipeConfirm2 = false
-                        Toast.makeText(context, "تم مسح جميع البيانات كلياً وتصفير الأرصدة", Toast.LENGTH_LONG).show()
+                        if (backupCodeToImport.trim().isEmpty()) {
+                            Toast.makeText(context, "الرجاء كُتابة نص النسخة الاحتياطية أولاً", Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.importBackup(backupCodeToImport, context)
+                            backupCodeToImport = ""
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = RedColor)
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("تأكيد الحذف النهائي الشامل!", color = Color.White)
+                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("تنفيذ الاستيراد")
                 }
+            }
+        }
+
+        // Clean-slate reset app
+        Button(
+            onClick = {
+                viewModel.clearAllData()
+                Toast.makeText(context, "تم مسح كافة البيانات وعودة الأرصدة للصفر.", Toast.LENGTH_LONG).show()
             },
-            dismissButton = {
-                Button(
-                    onClick = { showWipeConfirm2 = false },
-                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, TextSecondaryColor)
+            colors = ButtonDefaults.buttonColors(containerColor = RedColor, contentColor = Color.White),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth().testTag("wipe_all_data")
+        ) {
+            Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(getString(R.string.wipe_all_data), fontWeight = FontWeight.Bold)
+        }
+    }
+
+    // Dynamic Multi-Currency Balance Editor Dialog (Requirement 2 & 5)
+    if (showBalanceEditor) {
+        var uUSDT by remember { mutableStateOf(balance.balanceUSDT.toString()) }
+        var uUSDC by remember { mutableStateOf(balance.balanceUSDC.toString()) }
+        var uBTC by remember { mutableStateOf(balance.balanceBTC.toString()) }
+        var uETH by remember { mutableStateOf(balance.balanceETH.toString()) }
+        var uSYP by remember { mutableStateOf(balance.balanceSYP.toString()) }
+        var uUSD by remember { mutableStateOf(balance.balanceUSD.toString()) }
+        var uTRY by remember { mutableStateOf(balance.balanceTRY.toString()) }
+        var uEUR by remember { mutableStateOf(balance.balanceEUR.toString()) }
+
+        Dialog(onDismissRequest = { showBalanceEditor = false }) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CardColor),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("إلغاء وتراجع الآن")
+                    Text(
+                        text = getString(R.string.manual_balance_title),
+                        fontWeight = FontWeight.Bold,
+                        color = TextColor,
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Text("أرصدة العملات الرقمية / Crypto", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uUSDT,
+                            onValueChange = { uUSDT = it },
+                            label = { Text("USDT") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = uUSDC,
+                            onValueChange = { uUSDC = it },
+                            label = { Text("USDC") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uBTC,
+                            onValueChange = { uBTC = it },
+                            label = { Text("BTC") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = uETH,
+                            onValueChange = { uETH = it },
+                            label = { Text("ETH") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("أرصدة العملات المحلية / Fiat", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uSYP,
+                            onValueChange = { uSYP = it },
+                            label = { Text("SYP") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = uUSD,
+                            onValueChange = { uUSD = it },
+                            label = { Text("USD") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = uTRY,
+                            onValueChange = { uTRY = it },
+                            label = { Text("TRY") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = uEUR,
+                            onValueChange = { uEUR = it },
+                            label = { Text("EUR") },
+                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            viewModel.updateBalances(
+                                syp = uSYP.toDoubleOrNull() ?: 0.0,
+                                usdt = uUSDT.toDoubleOrNull() ?: 0.0,
+                                usd = uUSD.toDoubleOrNull() ?: 0.0,
+                                tryVal = uTRY.toDoubleOrNull() ?: 0.0,
+                                eur = uEUR.toDoubleOrNull() ?: 0.0,
+                                usdc = uUSDC.toDoubleOrNull() ?: 0.0,
+                                btc = uBTC.toDoubleOrNull() ?: 0.0,
+                                eth = uETH.toDoubleOrNull() ?: 0.0
+                            )
+                            showBalanceEditor = false
+                            Toast.makeText(context, "تم حفظ رأس المال والعملات المعدلة يدوياً بنجاح.", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text(getString(R.string.save_balances_btn), fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = { showBalanceEditor = false },
+                        border = BorderStroke(1.dp, TextSecondaryColor),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text(getString(R.string.cancel_btn), color = TextColor)
+                    }
                 }
-            },
-            containerColor = CardColor,
-            titleContentColor = TextColor,
-            textContentColor = TextColor
-        )
+            }
+        }
     }
 }

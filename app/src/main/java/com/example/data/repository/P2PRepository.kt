@@ -22,16 +22,30 @@ class P2PRepository(
         return balanceDao.getBalanceDirect() ?: Balance()
     }
 
-    suspend fun updateDirectBalance(syp: Double, usdt: Double) {
+    suspend fun updateDirectBalances(
+        syp: Double, usdt: Double, usd: Double, tryVal: Double,
+        eur: Double, usdc: Double, btc: Double, eth: Double
+    ) {
         val current = balanceDao.getBalanceDirect() ?: Balance()
-        balanceDao.insertOrUpdateBalance(current.copy(balanceSYP = syp, balanceUSDT = usdt))
+        balanceDao.insertOrUpdateBalance(current.copy(
+            balanceSYP = syp,
+            balanceUSDT = usdt,
+            balanceUSD = usd,
+            balanceTRY = tryVal,
+            balanceEUR = eur,
+            balanceUSDC = usdc,
+            balanceBTC = btc,
+            balanceETH = eth
+        ))
     }
 
-    suspend fun insertRate(rateStr: Double, type: String, dateStr: String) {
+    suspend fun insertRate(rateStr: Double, type: String, dateStr: String, crypto: String = "USDT", fiat: String = "SYP") {
         val rate = ExchangeRate(
             rate = rateStr,
             type = type,
-            date = dateStr
+            date = dateStr,
+            cryptoCurrency = crypto,
+            fiatCurrency = fiat
         )
         exchangeRateDao.insertRate(rate)
     }
@@ -115,11 +129,18 @@ class P2PRepository(
         return if (forTradeIndexInSorted == -1) {
             // New trade, filter by chronological order
             sorted.filter {
-                it.type == "BUY" && (it.date < forTrade.date || (it.date == forTrade.date && it.timestamp < forTrade.timestamp))
+                it.type == "BUY" && 
+                it.cryptoCurrency == forTrade.cryptoCurrency &&
+                it.fiatCurrency == forTrade.fiatCurrency &&
+                (it.date < forTrade.date || (it.date == forTrade.date && it.timestamp < forTrade.timestamp))
             }
         } else {
             // Existing trade, take preceding
-            sorted.subList(0, forTradeIndexInSorted).filter { it.type == "BUY" }
+            sorted.subList(0, forTradeIndexInSorted).filter { 
+                it.type == "BUY" &&
+                it.cryptoCurrency == forTrade.cryptoCurrency &&
+                it.fiatCurrency == forTrade.fiatCurrency
+            }
         }
     }
 
@@ -136,31 +157,37 @@ class P2PRepository(
         return Pair(avgBuyRate, Math.round(profit).toDouble())
     }
 
+    private fun updateBalanceValue(balance: Balance, currency: String, diff: Double): Balance {
+        return when (currency.uppercase()) {
+            "SYP" -> balance.copy(balanceSYP = balance.balanceSYP + diff)
+            "USDT" -> balance.copy(balanceUSDT = balance.balanceUSDT + diff)
+            "USD" -> balance.copy(balanceUSD = balance.balanceUSD + diff)
+            "TRY" -> balance.copy(balanceTRY = balance.balanceTRY + diff)
+            "EUR" -> balance.copy(balanceEUR = balance.balanceEUR + diff)
+            "USDC" -> balance.copy(balanceUSDC = balance.balanceUSDC + diff)
+            "BTC" -> balance.copy(balanceBTC = balance.balanceBTC + diff)
+            "ETH" -> balance.copy(balanceETH = balance.balanceETH + diff)
+            else -> balance
+        }
+    }
+
     private fun applyTradeEffect(balance: Balance, trade: Trade): Balance {
         return if (trade.type == "BUY") {
-            balance.copy(
-                balanceSYP = balance.balanceSYP - (trade.amount * trade.rate),
-                balanceUSDT = balance.balanceUSDT + (trade.amount - trade.fee)
-            )
+            val bal1 = updateBalanceValue(balance, trade.cryptoCurrency, trade.amount - trade.fee)
+            updateBalanceValue(bal1, trade.fiatCurrency, -(trade.amount * trade.rate))
         } else {
-            balance.copy(
-                balanceSYP = balance.balanceSYP + (trade.amount * trade.rate),
-                balanceUSDT = balance.balanceUSDT - (trade.amount + trade.fee)
-            )
+            val bal1 = updateBalanceValue(balance, trade.cryptoCurrency, -(trade.amount + trade.fee))
+            updateBalanceValue(bal1, trade.fiatCurrency, trade.amount * trade.rate)
         }
     }
 
     private fun revertTradeEffect(balance: Balance, trade: Trade): Balance {
         return if (trade.type == "BUY") {
-            balance.copy(
-                balanceSYP = balance.balanceSYP + (trade.amount * trade.rate),
-                balanceUSDT = balance.balanceUSDT - (trade.amount - trade.fee)
-            )
+            val bal1 = updateBalanceValue(balance, trade.cryptoCurrency, -(trade.amount - trade.fee))
+            updateBalanceValue(bal1, trade.fiatCurrency, trade.amount * trade.rate)
         } else {
-            balance.copy(
-                balanceSYP = balance.balanceSYP - (trade.amount * trade.rate),
-                balanceUSDT = balance.balanceUSDT + (trade.amount + trade.fee)
-            )
+            val bal1 = updateBalanceValue(balance, trade.cryptoCurrency, trade.amount + trade.fee)
+            updateBalanceValue(bal1, trade.fiatCurrency, -(trade.amount * trade.rate))
         }
     }
 

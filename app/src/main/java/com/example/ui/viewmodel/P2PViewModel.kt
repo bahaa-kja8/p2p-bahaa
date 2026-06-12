@@ -21,7 +21,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
+class P2PViewModel(private val repository: P2PRepository, private val context: Context) : ViewModel() {
+
+    private val sharedPrefs = context.getSharedPreferences("p2p_prefs", Context.MODE_PRIVATE)
 
     // Current screen Tab
     private val _currentTab = MutableStateFlow("HOME")
@@ -30,6 +32,15 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
     // Item being edited
     private val _editingTrade = MutableStateFlow<Trade?>(null)
     val editingTrade: StateFlow<Trade?> = _editingTrade.asStateFlow()
+
+    // Language setting flow
+    private val _language = MutableStateFlow(sharedPrefs.getString("lang", "ar") ?: "ar")
+    val language: StateFlow<String> = _language.asStateFlow()
+
+    fun setLanguage(lang: String) {
+        sharedPrefs.edit().putString("lang", lang).apply()
+        _language.value = lang
+    }
 
     // Repos collections
     val trades: StateFlow<List<Trade>> = repository.allTrades
@@ -64,7 +75,10 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
         rate: Double,
         fee: Double,
         date: String,
-        note: String
+        note: String,
+        crypto: String = "USDT",
+        fiat: String = "SYP",
+        customerName: String = ""
     ) {
         viewModelScope.launch {
             val editItem = _editingTrade.value
@@ -79,7 +93,10 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
                 avgBuyRate = 0.0, // Calculated during save
                 date = date,
                 note = note,
-                timestamp = editItem?.timestamp ?: System.currentTimeMillis()
+                timestamp = editItem?.timestamp ?: System.currentTimeMillis(),
+                cryptoCurrency = crypto,
+                fiatCurrency = fiat,
+                customerName = customerName
             )
 
             if (editItem != null) {
@@ -98,16 +115,19 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
         }
     }
 
-    fun updateBalances(syp: Double, usdt: Double) {
+    fun updateBalances(
+        syp: Double, usdt: Double, usd: Double, tryVal: Double,
+        eur: Double, usdc: Double, btc: Double, eth: Double
+    ) {
         viewModelScope.launch {
-            repository.updateDirectBalance(syp, usdt)
+            repository.updateDirectBalances(syp, usdt, usd, tryVal, eur, usdc, btc, eth)
         }
     }
 
-    fun addExchangeRate(rate: Double, type: String) {
+    fun addExchangeRate(rate: Double, type: String, crypto: String = "USDT", fiat: String = "SYP") {
         viewModelScope.launch {
             val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(Date())
-            repository.insertRate(rate, type, dateStr)
+            repository.insertRate(rate, type, dateStr, crypto, fiat)
         }
     }
 
@@ -129,6 +149,12 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
         val bal = balance.value ?: Balance()
         json.put("balanceSYP", bal.balanceSYP)
         json.put("balanceUSDT", bal.balanceUSDT)
+        json.put("balanceUSD", bal.balanceUSD)
+        json.put("balanceTRY", bal.balanceTRY)
+        json.put("balanceEUR", bal.balanceEUR)
+        json.put("balanceUSDC", bal.balanceUSDC)
+        json.put("balanceBTC", bal.balanceBTC)
+        json.put("balanceETH", bal.balanceETH)
 
         val tradesArray = JSONArray()
         for (t in trades.value) {
@@ -144,6 +170,9 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
                 put("date", t.date)
                 put("note", t.note)
                 put("timestamp", t.timestamp)
+                put("cryptoCurrency", t.cryptoCurrency)
+                put("fiatCurrency", t.fiatCurrency)
+                put("customerName", t.customerName)
             }
             tradesArray.put(tObj)
         }
@@ -157,6 +186,8 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
                 put("type", r.type)
                 put("date", r.date)
                 put("timestamp", r.timestamp)
+                put("cryptoCurrency", r.cryptoCurrency)
+                put("fiatCurrency", r.fiatCurrency)
             }
             ratesArray.put(rObj)
         }
@@ -170,15 +201,18 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
         val sb = StringBuilder()
         // Adding UTF-8 byte order mark (BOM) for Excel arabic compatibility
         sb.append('\uFEFF')
-        sb.append("النوع,الكمية USDT,السعر,الإجمالي,الرسوم USDT,الربح SYP,التاريخ,الملاحظة\n")
+        sb.append("النوع,الكمية,العملة الرقمية,السعر الصرف,العملة المحلية,الإجمالي,الرسوم,الربح المعادل,اسم العميل,التاريخ,الملاحظة\n")
         for (t in trades.value) {
             val typeAr = if (t.type == "BUY") "شراء" else "بيع"
             sb.append("$typeAr,")
             sb.append("${t.amount},")
+            sb.append("${t.cryptoCurrency},")
             sb.append("${t.rate},")
+            sb.append("${t.fiatCurrency},")
             sb.append("${t.totalSYP},")
             sb.append("${t.fee},")
             sb.append("${if (t.type == "SELL") t.profitSYP else "-"},")
+            sb.append("\"${t.customerName.replace("\"", "\"\"")}\",")
             sb.append("${t.date},")
             sb.append("\"${t.note.replace("\"", "\"\"")}\"\n")
         }
@@ -190,7 +224,13 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
             val json = JSONObject(jsonStr)
             val balSyp = json.optDouble("balanceSYP", 0.0)
             val balUsdt = json.optDouble("balanceUSDT", 0.0)
-            val bal = Balance("current_balance", balSyp, balUsdt)
+            val balUsd = json.optDouble("balanceUSD", 0.0)
+            val balTry = json.optDouble("balanceTRY", 0.0)
+            val balEur = json.optDouble("balanceEUR", 0.0)
+            val balUsdc = json.optDouble("balanceUSDC", 0.0)
+            val balBtc = json.optDouble("balanceBTC", 0.0)
+            val balEth = json.optDouble("balanceETH", 0.0)
+            val bal = Balance("current_balance", balSyp, balUsdt, balUsd, balTry, balEur, balUsdc, balBtc, balEth)
 
             val tradesList = ArrayList<Trade>()
             val tradesAr = json.optJSONArray("trades")
@@ -209,7 +249,10 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
                             avgBuyRate = obj.optDouble("avgBuyRate", 0.0),
                             date = obj.optString("date", getTodayString()),
                             note = obj.optString("note", ""),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            cryptoCurrency = obj.optString("cryptoCurrency", "USDT"),
+                            fiatCurrency = obj.optString("fiatCurrency", "SYP"),
+                            customerName = obj.optString("customerName", "")
                         )
                     )
                 }
@@ -226,7 +269,9 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
                             rate = obj.getDouble("rate"),
                             type = obj.getString("type"),
                             date = obj.optString("date", ""),
-                            timestamp = obj.optLong("timestamp", System.currentTimeMillis())
+                            timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
+                            cryptoCurrency = obj.optString("cryptoCurrency", "USDT"),
+                            fiatCurrency = obj.optString("fiatCurrency", "SYP")
                         )
                     )
                 }
@@ -241,6 +286,55 @@ class P2PViewModel(private val repository: P2PRepository) : ViewModel() {
             false
         }
     }
+
+    fun exportBackup(context: Context) {
+        val backupJson = generateBackupJson()
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("P2P Backup", backupJson)
+            clipboard.setPrimaryClip(clip)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        val sendIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TEXT, backupJson)
+            type = "text/plain"
+        }
+        val shareIntent = android.content.Intent.createChooser(sendIntent, "تصدير النسخة الاحتياطية")
+        shareIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(shareIntent)
+    }
+
+    fun exportCSVReport(context: Context) {
+        val csvData = generateCSV()
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            val clip = android.content.ClipData.newPlainText("P2P CSV Report", csvData)
+            clipboard.setPrimaryClip(clip)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        val sendIntent = android.content.Intent().apply {
+            action = android.content.Intent.ACTION_SEND
+            putExtra(android.content.Intent.EXTRA_TEXT, csvData)
+            type = "text/plain"
+        }
+        val shareIntent = android.content.Intent.createChooser(sendIntent, "تصدير التقرير CSV")
+        shareIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(shareIntent)
+    }
+
+    fun importBackup(backupStr: String, context: Context) {
+        val success = importBackupJson(backupStr)
+        if (success) {
+            android.widget.Toast.makeText(context, "تم استيراد البيانات بنجاح", android.widget.Toast.LENGTH_SHORT).show()
+        } else {
+            android.widget.Toast.makeText(context, "فشل الاستيراد! الرجاء التأكد من صحة الكود", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
 }
 
 class P2PViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
@@ -249,7 +343,7 @@ class P2PViewModelFactory(private val context: Context) : ViewModelProvider.Fact
             val db = AppDatabase.getDatabase(context)
             val repository = P2PRepository(db.tradeDao(), db.exchangeRateDao(), db.balanceDao())
             @Suppress("UNCHECKED_CAST")
-            return P2PViewModel(repository) as T
+            return P2PViewModel(repository, context) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -1,3 +1,78 @@
 <resources>
     <string name="app_name">تاجر P2P</string>
+    <string name="home">الرئيسية</string>
+    <string name="trade">صفقة</string>
+    <string name="history">السجل</string>
+    <string name="calendar">التقويم</string>
+    <string name="rates">الأسعار</string>
+    <string name="settings">الإعدادات</string>
+    
+    <string name="wallet_balances">رصيد المحفظة</string>
+    <string name="wipe_wallet">تصفية المحفظة بالكامل</string>
+    <string name="total_profits">إجمالي الأرباح</string>
+    <string name="active_days">أيام العمل النشطة</string>
+    <string name="avg_profit_per_trade">متوسط الربح / صفقة</string>
+    <string name="rates_today">مؤشر الأسعار اليوم</string>
+    <string name="rates_indicator">مؤشر الأسعار</string>
+    <string name="today_trades">صفقات اليوم النشطة</string>
+    <string name="sell">بيع</string>
+    <string name="buy">شراء</string>
+    <string name="all_types">الكل</string>
+    
+    <string name="add_new_trade">إضافة صفقة جديدة</string>
+    <string name="edit_trade">تعديل الصفقة</string>
+    <string name="trade_type">نوع الصفقة</string>
+    <string name="amount">الكمية</string>
+    <string name="crypto_currency">العملة الرقمية</string>
+    <string name="fiat_currency">العملة المحلية</string>
+    <string name="exchange_rate">سعر الصرف</string>
+    <string name="fee">الرسوم (إيجابي أو 0)</string>
+    <string name="trade_date">تاريخ الصفقة</string>
+    <string name="customer_name">اسم/ملاحظة العميل (اختياري)</string>
+    <string name="customer_field_hint">اسم العميل، الهاتف، أو الكود...</string>
+    <string name="note">الملاحظة</string>
+    <string name="save_trade_btn">حفظ الصفقة</string>
+    <string name="cancel_btn">إلغاء</string>
+    
+    <string name="search_hint">ابحث بالعميل، الملاحظة، العملة...</string>
+    <string name="delete_confirm_title">حذف الصفقة</string>
+    <string name="delete_confirm_msg">هل أنت متأكد من حذف هذه الصفقة؟ سيتم إعادة حساب الأرباح والأرصدة كلياً.</string>
+    
+    <string name="custom_rates_chart">تطور أسعار الصرف (رسم بياني)</string>
+    <string name="last_30_rates">آخر 30 سعر مسجل</string>
+    <string name="add_rate_desc">أضف سعر صرف حالي في السوق</string>
+    <string name="rate_value">سعر الصرف</string>
+    <string name="add_rate_btn">إضافة السعر</string>
+    
+    <string name="wipe_all_data">مسح جميع البيانات</string>
+    <string name="wipe_confirm1_msg">هل أنت متأكد من مسح جميع البيانات نهائياً؟ لا يمكن التراجع!</string>
+    <string name="wipe_confirm2_msg">تأكيد أخير: هل تود مسح الصفقات والأسعار والأرصدة بالكامل؟</string>
+    <string name="app_background_settings">إعدادات التطبيق الخلفية</string>
+    <string name="backup_share">النسخ الاحتياطي ومشاركة البيانات</string>
+    <string name="export_json">تصدير نسخة احتياطية (JSON)</string>
+    <string name="export_csv">مشاركة تقرير صفقات مميز (CSV)</string>
+    <string name="import_json">استيراد نسخة احتياطية (JSON)</string>
+    <string name="import_paste_hint">قُم بلصق رمز النسخ JSON هنا...</string>
+    <string name="import_btn">استيراد البيانات</string>
+    
+    <string name="manual_balance_title">تعديل الأرصدة يدوياً</string>
+    <string name="edit_balances_btn">تعديل الأرصدة يدوياً</string>
+    <string name="save_balances_btn">حفظ الأرصدة</string>
+    <string name="app_language">لغة التطبيق (Language)</string>
+    <string name="arabic">العربية</string>
+    <string name="english">English</string>
+    
+    <string name="monthly_profit_calendar">التقويم الشهري للأرباح</string>
+    <string name="working_days_count">أيام العمل هذا الشهر</string>
+    <string name="monthly_profit_total">إجمالي أرباح الشهر</string>
+    <string name="close">إغلاق</string>
+    <string name="detailed_day_trades">تفاصيل صفقات يوم</string>
+    <string name="total_syp_label">الإجمالي</string>
+    <string name="profit_syp_label">صافي الربح</string>
+    
+    <string name="avg_profit">متوسط ربح الصفقة</string>
+    <string name="best_day">أفضل يوم أرباح</string>
+    <string name="worst_day">أسوأ يوم أرباح</string>
+    <string name="roi_label">نسبة العائد (ROI)</string>
+    <string name="fee_inc_profit_row">صافي الربح (يشمل الرسوم)</string>
 </resources>
