@@ -1,0 +1,6 @@
+{
+  "name": "تاجر P2P",
+  "description": "تطبيق تاجر P2P لإدارة صفقات USDT والعملات الرقمية في السوق السورية مع حساب الأرباح وإدارة الأرصدة يدوياً وبالليرة السورية",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
