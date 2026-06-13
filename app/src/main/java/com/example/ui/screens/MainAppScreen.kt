@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -137,6 +138,40 @@ fun MainAppScreen(viewModel: P2PViewModel) {
     }
 }
 
+// --- Section Header with Gradient Icon (Rule 3 & 5) ---
+@Composable
+fun SectionHeader(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    gradient: Brush = GoldGradient
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(gradient, shape = RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = Color.Black,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = TextColor,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
 // --- Universal Format Helpers ---
 fun formatSyp(value: Double, code: String = "SYP"): String {
     val symbols = java.text.DecimalFormatSymbols(Locale.US)
@@ -219,9 +254,11 @@ fun CurrencyDropdown(
             value = selectedOption,
             onValueChange = {},
             label = { Text(label) },
+            shape = RoundedCornerShape(14.dp),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -276,29 +313,17 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(BackgroundGradient)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // Aesthetic App Title Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.TrendingUp,
-                contentDescription = null,
-                tint = GoldColor,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "${getString(R.string.app_name)} - ${getString(R.string.rates_indicator)}",
-                color = TextColor,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        SectionHeader(
+            title = "${getString(R.string.app_name)} - ${getString(R.string.rates_indicator)}",
+            icon = Icons.Default.TrendingUp,
+            gradient = GoldGradient
+        )
 
         // Expanded Multi-Currency Wallet Card (Requirement 2)
         Card(
@@ -306,8 +331,8 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 .fillMaxWidth()
                 .testTag("portfolio_card"),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp)
@@ -320,7 +345,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     Text(
                         text = getString(R.string.wallet_balances),
                         color = TextSecondaryColor,
-                        fontSize = 14.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(
@@ -336,7 +361,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Crypto currencies row list
-                Text("Crypto / الرقمية", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Crypto / الرقمية", color = GoldColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
                 listOf(
                     "USDT" to balance.balanceUSDT,
@@ -359,11 +384,11 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
-                HorizontalDivider(color = BgColor, thickness = 1.dp)
+                HorizontalDivider(color = BorderColor, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Fiat currencies list
-                Text("Fiat / المحلية", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Fiat / المحلية", color = GoldColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
                 listOf(
                     "SYP" to balance.balanceSYP,
@@ -393,8 +418,10 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             value = "${formatSyp(totalSypProfit, "SYP")} L.S / ل.س",
             valueColor = if (totalSypProfit >= 0.0) GreenColor else RedColor,
             modifier = Modifier.fillMaxWidth(),
+            icon = Icons.Default.AccountBalanceWallet,
+            gradient = GreenGradient,
             extraRow = {
-                HorizontalDivider(color = BgColor, modifier = Modifier.padding(vertical = 6.dp), thickness = 0.5.dp)
+                HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 8.dp), thickness = 0.5.dp)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -402,7 +429,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     Text(
                         text = "${getString(R.string.fee)} (USDT):",
                         color = TextSecondaryColor,
-                        fontSize = 11.sp
+                        style = MaterialTheme.typography.labelMedium
                     )
                     Text(
                         text = "${formatSyp(totalFeesUsdt, "USDT")} USDT",
@@ -423,13 +450,17 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 title = "عدد الصفقات الكلي",
                 value = "$totalTradesCount صفقة",
                 valueColor = TextColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                icon = Icons.Default.Receipt,
+                gradient = PurpleGradient
             )
             KpiCard(
                 title = "أعلى ربح صفقة",
                 value = "${formatSyp(maxSingleProfit, "SYP")} ل.س",
                 valueColor = GreenColor,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                icon = Icons.Default.TrendingUp,
+                gradient = GoldGradient
             )
         }
 
@@ -437,28 +468,47 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp)
             ) {
-                Text(
-                    text = getString(R.string.today_trades),
-                    color = GoldColor,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(GoldGradient, shape = RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Today,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Text(
+                        text = getString(R.string.today_trades),
+                        color = TextColor,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column {
-                        Text("نشاط اليوم", color = TextSecondaryColor, fontSize = 11.sp)
+                        Text("نشاط اليوم", color = TextSecondaryColor, style = MaterialTheme.typography.labelMedium)
                         Text("$todayTradesCount صفقات", color = TextColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("أرباح اليوم التقديرية", color = TextSecondaryColor, fontSize = 11.sp)
+                        Text("أرباح اليوم التقديرية", color = TextSecondaryColor, style = MaterialTheme.typography.labelMedium)
                         Text(
                             text = "${formatSyp(todaySypProfit, "SYP")} ل.س",
                             color = if (todaySypProfit >= 0.0) GreenColor else RedColor,
@@ -513,15 +563,15 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(BackgroundGradient)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            text = if (editingTrade != null) getString(R.string.edit_trade) else getString(R.string.add_new_trade),
-            color = TextColor,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+        SectionHeader(
+            title = if (editingTrade != null) getString(R.string.edit_trade) else getString(R.string.add_new_trade),
+            icon = if (editingTrade != null) Icons.Default.Edit else Icons.Default.AddCircle,
+            gradient = GoldGradient
         )
 
         // Segmented Control for Buy/Sell instead of duplicate toggles
@@ -558,8 +608,10 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             value = amountInput,
             onValueChange = { amountInput = it },
             label = { Text("${getString(R.string.amount)} ($selectedCrypto)") },
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -574,8 +626,10 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             value = rateInput,
             onValueChange = { rateInput = it },
             label = { Text("${getString(R.string.exchange_rate)} ($selectedFiat / 1 $selectedCrypto)") },
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -589,7 +643,8 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
         if (amountInput.isNotEmpty() && rateInput.isNotEmpty()) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CardColor),
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(1.dp, BorderColor),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
@@ -597,7 +652,7 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(getString(R.string.total_syp_label), color = TextSecondaryColor, fontSize = 13.sp)
+                    Text(getString(R.string.total_syp_label), color = TextSecondaryColor, style = MaterialTheme.typography.labelMedium)
                     Text(
                         "${formatSyp(totalCalculated, selectedFiat)} $selectedFiat",
                         color = GoldColor,
@@ -613,8 +668,10 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             value = feeInput,
             onValueChange = { feeInput = it },
             label = { Text("${getString(R.string.fee)} ($selectedCrypto)") },
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -630,6 +687,7 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             onValueChange = { dateInput = it },
             label = { Text(getString(R.string.trade_date)) },
             readOnly = true,
+            shape = RoundedCornerShape(14.dp),
             trailingIcon = {
                 IconButton(onClick = { datePickerDialog.show() }) {
                     Icon(Icons.Default.DateRange, contentDescription = null, tint = GoldColor)
@@ -637,6 +695,7 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             },
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -651,8 +710,10 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             onValueChange = { customerNameInput = it },
             label = { Text(getString(R.string.customer_name)) },
             placeholder = { Text(getString(R.string.customer_field_hint)) },
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -666,8 +727,10 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
             value = noteInput,
             onValueChange = { noteInput = it },
             label = { Text(getString(R.string.note)) },
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedLabelColor = GoldColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
@@ -701,19 +764,24 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
                     Toast.makeText(context, "تم حفظ بيانات العملية", Toast.LENGTH_SHORT).show()
                 }
             },
-            colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("save_trade_btn")
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+            contentPadding = PaddingValues(),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .background(GoldGradient, shape = RoundedCornerShape(14.dp))
+                .testTag("save_trade_btn")
         ) {
-            Text(getString(R.string.save_trade_btn), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(getString(R.string.save_trade_btn), fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
         }
 
         if (editingTrade != null) {
             Button(
                 onClick = { viewModel.cancelEditing() },
                 colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                border = BorderStroke(1.dp, TextSecondaryColor),
-                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, BorderColor),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) {
                 Text(getString(R.string.cancel_btn))
@@ -757,14 +825,14 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(BackgroundGradient)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            text = getString(R.string.history),
-            color = TextColor,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+        SectionHeader(
+            title = getString(R.string.history),
+            icon = Icons.Default.List,
+            gradient = GoldGradient
         )
 
         // Custom view Segmented Control replace separate duplicate buttons
@@ -794,11 +862,14 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     }
                 }
             },
+            shape = RoundedCornerShape(14.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = GoldColor,
+                unfocusedBorderColor = BorderColor,
                 focusedTextColor = TextColor,
                 unfocusedTextColor = TextColor,
-                unfocusedBorderColor = CardColor
+                focusedLabelColor = GoldColor,
+                unfocusedLabelColor = TextSecondaryColor
             ),
             modifier = Modifier.fillMaxWidth().testTag("search_view")
         )
@@ -808,7 +879,7 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Text("لا توجد عمليات مطابقة لبحثك.", color = TextSecondaryColor)
+                Text("لا توجد عمليات مطابقة لبحثك.", color = TextSecondaryColor, style = MaterialTheme.typography.labelMedium)
             }
         } else {
             LazyColumn(
@@ -821,96 +892,110 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             .fillMaxWidth()
                             .clickable { selectedTradeOptions = trade }, // Open dialog on click (Requirement 6)
                         colors = CardDefaults.cardColors(containerColor = CardColor),
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, if (trade.type == "BUY") GreenColor.copy(alpha = 0.2f) else RedColor.copy(alpha = 0.2f))
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, BorderColor)
                     ) {
-                        Column(
+                        Row(
                             modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                            val isBuy = trade.type == "BUY"
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .background(if (isBuy) GreenGradient else RedGradient, shape = RoundedCornerShape(11.dp)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    val isBuy = trade.type == "BUY"
-                                    Box(
-                                        modifier = Modifier
-                                            .background(
-                                                color = if (isBuy) GreenColor.copy(alpha = 0.15f) else RedColor.copy(alpha = 0.15f),
-                                                shape = RoundedCornerShape(6.dp)
-                                            )
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isBuy) "شراء" else "بيع",
-                                            color = if (isBuy) GreenColor else RedColor,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = if (isBuy) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (isBuy) getString(R.string.buy) else getString(R.string.sell),
+                                        color = if (isBuy) GreenColor else RedColor,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
                                     Text(trade.date, color = TextSecondaryColor, fontSize = 11.sp)
                                 }
-                                if (trade.customerName.isNotEmpty()) {
-                                    Text(
-                                        text = trade.customerName,
-                                        color = GoldColor,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text("الكمية", color = TextSecondaryColor, fontSize = 11.sp)
-                                    Text("${formatSyp(trade.amount, trade.cryptoCurrency)} ${trade.cryptoCurrency}", color = TextColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("سعر الصرف", color = TextSecondaryColor, fontSize = 11.sp)
-                                    Text("${formatSyp(trade.rate, trade.fiatCurrency)} ${trade.fiatCurrency}", color = TextColor, fontSize = 13.sp)
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("النص الخارجي", color = TextSecondaryColor, fontSize = 11.sp)
-                                    val totalVal = trade.amount * trade.rate
-                                    Text("${formatSyp(totalVal, trade.fiatCurrency)} ${trade.fiatCurrency}", color = GoldColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            if (trade.type == "SELL") {
                                 Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(BgColor, shape = RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("صافي الأرباح:", color = TextSecondaryColor, fontSize = 11.sp)
-                                    Text(
-                                        "${formatSyp(trade.profitSYP, "SYP")} SYP",
-                                        color = if (trade.profitSYP >= 0) GreenColor else RedColor,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp
-                                    )
+                                    Column {
+                                        Text("الكمية", style = MaterialTheme.typography.labelMedium, color = TextSecondaryColor)
+                                        Text("${formatSyp(trade.amount, trade.cryptoCurrency)} ${trade.cryptoCurrency}", color = TextColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("سعر الصرف", style = MaterialTheme.typography.labelMedium, color = TextSecondaryColor)
+                                        Text("${formatSyp(trade.rate, trade.fiatCurrency)} ${trade.fiatCurrency}", color = TextColor, fontSize = 13.sp)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("الإجمالي", style = MaterialTheme.typography.labelMedium, color = TextSecondaryColor)
+                                        val totalVal = trade.amount * trade.rate
+                                        Text("${formatSyp(totalVal, trade.fiatCurrency)} ${trade.fiatCurrency}", color = GoldColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
-                            }
 
-                            if (trade.note.isNotEmpty()) {
-                                Text(
-                                    text = "ملاحظة: ${trade.note}",
-                                    color = TextSecondaryColor,
-                                    fontSize = 11.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                if (trade.type == "SELL") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(BgColor, shape = RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("صافي الأرباح:", style = MaterialTheme.typography.labelMedium, color = TextSecondaryColor)
+                                        Text(
+                                            "${formatSyp(trade.profitSYP, "SYP")} SYP",
+                                            color = if (trade.profitSYP >= 0) GreenColor else RedColor,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                }
+
+                                if (trade.customerName.isNotEmpty() || trade.note.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (trade.customerName.isNotEmpty()) {
+                                            Text(
+                                                text = "العميل: ${trade.customerName}",
+                                                color = GoldColor,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                        if (trade.note.isNotEmpty()) {
+                                            Text(
+                                                text = "ملاحظة: ${trade.note}",
+                                                color = TextSecondaryColor,
+                                                fontSize = 11.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -925,9 +1010,9 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Dialog(onDismissRequest = { selectedTradeOptions = null }) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CardColor),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.padding(16.dp),
-                border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
+                border = BorderStroke(1.dp, BorderColor)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -938,13 +1023,13 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                         text = "خيارات العملية",
                         fontWeight = FontWeight.Bold,
                         color = TextColor,
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center
                     )
                     Text(
                         text = "${if (selected.type == "BUY") "شراء" else "بيع"} ${selected.amount} ${selected.cryptoCurrency} @ ${selected.rate}",
                         color = TextSecondaryColor,
-                        fontSize = 13.sp,
+                        style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Center
                     )
 
@@ -953,13 +1038,22 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             viewModel.startEditing(selected)
                             selectedTradeOptions = null
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(GoldGradient, shape = RoundedCornerShape(14.dp))
                     ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("تعديل تفاصيل الصفقة", fontWeight = FontWeight.Bold)
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("تعديل تفاصيل الصفقة", fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
                     }
 
                     Button(
@@ -967,20 +1061,29 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             tradeToDelete = selected
                             selectedTradeOptions = null
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = RedColor, contentColor = Color.White),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(RedGradient, shape = RoundedCornerShape(14.dp))
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("حذف الصفقة نهائياً", fontWeight = FontWeight.Bold)
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("حذف الصفقة نهائياً", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
                     }
 
                     OutlinedButton(
                         onClick = { selectedTradeOptions = null },
-                        border = BorderStroke(1.dp, TextSecondaryColor),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                        border = BorderStroke(1.dp, BorderColor),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
                     ) {
                         Text(getString(R.string.close), color = TextColor)
                     }
@@ -994,8 +1097,9 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         val t = tradeToDelete!!
         AlertDialog(
             onDismissRequest = { tradeToDelete = null },
-            title = { Text(getString(R.string.delete_confirm_title), fontWeight = FontWeight.Bold) },
-            text = { Text(getString(R.string.delete_confirm_msg), color = TextColor) },
+            shape = RoundedCornerShape(18.dp),
+            title = { Text(getString(R.string.delete_confirm_title), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
+            text = { Text(getString(R.string.delete_confirm_msg), color = TextColor, style = MaterialTheme.typography.labelMedium) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1003,7 +1107,8 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                         tradeToDelete = null
                         Toast.makeText(context, "تم الحذف واسترداد تأثير المحفظة", Toast.LENGTH_SHORT).show()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = RedColor)
+                    colors = ButtonDefaults.buttonColors(containerColor = RedColor),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Text("حذف فعلي")
                 }
@@ -1011,7 +1116,8 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             dismissButton = {
                 Button(
                     onClick = { tradeToDelete = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor)
+                    colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(getString(R.string.cancel_btn))
                 }
@@ -1037,31 +1143,32 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(BackgroundGradient)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Text(
-            text = getString(R.string.rates_today),
-            color = TextColor,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
+        SectionHeader(
+            title = getString(R.string.rates_today),
+            icon = Icons.Default.TrendingUp,
+            gradient = GoldGradient
         )
 
         // Dropdowns for currency selection
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
                     text = getString(R.string.add_rate_desc),
                     color = GoldColor,
-                    fontSize = 14.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -1089,11 +1196,14 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     value = rateInput,
                     onValueChange = { rateInput = it },
                     label = { Text("${getString(R.string.rate_value)} ($selectedFiat/1 $selectedCrypto)") },
+                    shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GoldColor,
+                        unfocusedBorderColor = BorderColor,
                         focusedLabelColor = GoldColor,
                         focusedTextColor = TextColor,
-                        unfocusedTextColor = TextColor
+                        unfocusedTextColor = TextColor,
+                        unfocusedLabelColor = TextSecondaryColor
                     ),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
@@ -1118,11 +1228,15 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             Toast.makeText(context, "تم تسجيل مؤشر السعر التقديري بنجاح", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .background(GoldGradient, shape = RoundedCornerShape(14.dp))
                 ) {
-                    Text(getString(R.string.add_rate_btn), fontWeight = FontWeight.Bold)
+                    Text(getString(R.string.add_rate_btn), fontWeight = FontWeight.Bold, color = Color.Black)
                 }
             }
         }
@@ -1131,15 +1245,24 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Text(
             text = getString(R.string.custom_rates_chart),
             color = TextColor,
-            fontSize = 16.sp,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
 
-        // Plotting Line graph with MPAndroidChart wrapper
-        RatesLineChart(
-            rates = rates,
+        // Plotting Line graph with MPAndroidChart wrapper (embedded inside a Card - Rule 9)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor),
             modifier = Modifier.fillMaxWidth()
-        )
+        ) {
+            Box(modifier = Modifier.padding(12.dp)) {
+                RatesLineChart(
+                    rates = rates,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 }
 
@@ -1151,7 +1274,7 @@ fun RatesLineChart(rates: List<ExchangeRate>, modifier: Modifier = Modifier) {
             modifier = modifier.fillMaxWidth().height(180.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("لا تتوفر حركة كافية لرسّ السعر بياناً حالياً.", color = TextSecondaryColor, fontSize = 12.sp)
+            Text("لا تتوفر حركة كافية لرسّ السعر بياناً حالياً.", color = TextSecondaryColor, style = MaterialTheme.typography.labelMedium)
         }
         return
     }
@@ -1248,8 +1371,8 @@ fun RatesLineChart(rates: List<ExchangeRate>, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .height(200.dp)
-            .background(CardColor, shape = RoundedCornerShape(12.dp))
-            .padding(10.dp)
+            .background(Color.Transparent)
+            .padding(4.dp)
     )
 }
 
@@ -1315,35 +1438,23 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(BackgroundGradient)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.DateRange,
-                contentDescription = null,
-                tint = GoldColor,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = getString(R.string.monthly_profit_calendar),
-                color = TextColor,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        SectionHeader(
+            title = getString(R.string.monthly_profit_calendar),
+            icon = Icons.Default.DateRange,
+            gradient = GoldGradient
+        )
 
         // Calendar Month Controller Header
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(14.dp),
-            border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.2f))
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
@@ -1364,7 +1475,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 Text(
                     text = "${monthNamesArabic[currentMonth]} $currentYear",
                     color = TextColor,
-                    fontSize = 16.sp,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -1390,12 +1501,16 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 title = getString(R.string.working_days_count),
                 value = "$workingDaysCount يوم",
                 valueColor = GoldColor,
+                gradient = PurpleGradient,
+                icon = Icons.Default.DateRange,
                 modifier = Modifier.weight(1f)
             )
             KpiCard(
                 title = getString(R.string.monthly_profit_total),
                 value = "${formatSyp(monthlyProfit, "SYP")} SP",
                 valueColor = if (monthlyProfit >= 0.0) GreenColor else RedColor,
+                gradient = if (monthlyProfit >= 0.0) GreenGradient else RedGradient,
+                icon = Icons.Default.TrendingUp,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1409,12 +1524,16 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 title = getString(R.string.avg_profit),
                 value = "${formatSyp(avgProfitPerTrade, "SYP")} SP",
                 valueColor = GreenColor,
+                gradient = BlueGradient,
+                icon = Icons.Default.Star,
                 modifier = Modifier.weight(1f)
             )
             KpiCard(
                 title = getString(R.string.roi_label),
                 value = String.format(Locale.US, "%.2f%%", roi),
                 valueColor = GoldColor,
+                gradient = GoldGradient,
+                icon = Icons.Default.ShowChart,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1428,12 +1547,16 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 title = "${getString(R.string.best_day)} ($bestDayStr)",
                 value = "${formatSyp(bestDayVal, "SYP")} SP",
                 valueColor = GreenColor,
+                gradient = GreenGradient,
+                icon = Icons.Default.ThumbUp,
                 modifier = Modifier.weight(1f)
             )
             KpiCard(
                 title = "${getString(R.string.worst_day)} ($worstDayStr)",
                 value = "${formatSyp(worstDayVal, "SYP")} SP",
                 valueColor = RedColor,
+                gradient = RedGradient,
+                icon = Icons.Default.ThumbDown,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -1442,10 +1565,11 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
+                modifier = Modifier.padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 val daysOfWeekAr = listOf("سبت", "أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة")
@@ -1459,7 +1583,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             modifier = Modifier.weight(1f),
                             textAlign = TextAlign.Center,
                             color = TextSecondaryColor,
-                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -1550,14 +1674,24 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Text(
             text = "تدرج الربح الصافي اليومي للمبيعات (ل.س)",
             color = TextColor,
-            fontSize = 15.sp,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
 
-        MonthlyProfitChart(
-            monthlyTrades = monthlyTrades,
+        // Plotting profit graph embedded in a custom design Card - Rule 9
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CardColor),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor),
             modifier = Modifier.fillMaxWidth()
-        )
+        ) {
+            Box(modifier = Modifier.padding(12.dp)) {
+                MonthlyProfitChart(
+                    monthlyTrades = monthlyTrades,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
     }
 
     // Day Details Dialog popup
@@ -1566,9 +1700,9 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Dialog(onDismissRequest = { selectedDayDetails = null }) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CardColor),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
-                border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
+                border = BorderStroke(1.dp, BorderColor)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -1577,13 +1711,13 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     Text(
                         text = "${getString(R.string.detailed_day_trades)}: $dayPicked",
                         color = TextColor,
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    HorizontalDivider(color = TextSecondaryColor.copy(alpha = 0.2f))
+                    HorizontalDivider(color = BorderColor)
 
                     Box(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)) {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1591,7 +1725,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(BgColor, shape = RoundedCornerShape(8.dp))
+                                        .background(BgColor, shape = RoundedCornerShape(10.dp))
                                         .padding(10.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
@@ -1619,8 +1753,8 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     OutlinedButton(
                         onClick = { selectedDayDetails = null },
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, TextSecondaryColor)
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, BorderColor)
                     ) {
                         Text(getString(R.string.close), color = TextColor)
                     }
@@ -1727,24 +1861,47 @@ fun KpiCard(
     value: String,
     valueColor: Color,
     modifier: Modifier = Modifier,
+    gradient: Brush = GoldGradient,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     extraRow: @Composable (() -> Unit)? = null
 ) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = CardColor),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, BorderColor)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(14.dp)
         ) {
-            Text(
-                text = title,
-                color = TextSecondaryColor,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (icon != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(gradient, shape = RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            icon,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondaryColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = value,
                 color = valueColor,
@@ -1776,34 +1933,23 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(BackgroundGradient)
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.Settings,
-                contentDescription = null,
-                tint = GoldColor,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = getString(R.string.settings),
-                color = TextColor,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        SectionHeader(
+            title = getString(R.string.settings),
+            icon = Icons.Default.Settings,
+            gradient = GoldGradient
+        )
 
         // Language Section (Requirement 1)
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -1811,9 +1957,9 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             ) {
                 Text(
                     text = getString(R.string.app_language),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = GoldColor,
-                    fontSize = 14.sp
+                    color = GoldColor
                 )
 
                 Row(
@@ -1826,8 +1972,9 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             containerColor = if (langState == "ar") GoldColor else BgColor,
                             contentColor = if (langState == "ar") Color.Black else TextSecondaryColor
                         ),
-                        modifier = Modifier.weight(1f).height(40.dp),
-                        shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = if (langState == "ar") null else BorderStroke(1.dp, BorderColor)
                     ) {
                         Text(getString(R.string.arabic), fontWeight = FontWeight.Bold)
                     }
@@ -1838,8 +1985,9 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             containerColor = if (langState == "en") GoldColor else BgColor,
                             contentColor = if (langState == "en") Color.Black else TextSecondaryColor
                         ),
-                        modifier = Modifier.weight(1f).height(40.dp),
-                        shape = RoundedCornerShape(8.dp)
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = if (langState == "en") null else BorderStroke(1.dp, BorderColor)
                     ) {
                         Text(getString(R.string.english), fontWeight = FontWeight.Bold)
                     }
@@ -1851,7 +1999,8 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -1859,24 +2008,33 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             ) {
                 Text(
                     text = "التحكم اليدوي ورأس المال",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = GoldColor,
-                    fontSize = 14.sp
+                    color = GoldColor
                 )
                 Text(
                     text = "قم بتعديل رأس المال المبدئي والأرصدة لجميع العملات الرقمية والمحلية يدوياً في أي وقت.",
                     color = TextSecondaryColor,
-                    fontSize = 12.sp
+                    style = MaterialTheme.typography.labelMedium
                 )
                 Button(
                     onClick = { showBalanceEditor = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .background(GoldGradient, shape = RoundedCornerShape(14.dp))
                 ) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(getString(R.string.manual_balance_title), fontWeight = FontWeight.Bold)
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(getString(R.string.manual_balance_title), fontWeight = FontWeight.Bold, color = Color.Black)
+                    }
                 }
             }
         }
@@ -1885,7 +2043,8 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, BorderColor)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -1893,17 +2052,17 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             ) {
                 Text(
                     text = getString(R.string.backup_share),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = GoldColor,
-                    fontSize = 14.sp
+                    color = GoldColor
                 )
 
                 Button(
                     onClick = { viewModel.exportBackup(context) },
                     colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    border = BorderStroke(1.dp, BorderColor),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1913,35 +2072,38 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 Button(
                     onClick = { viewModel.exportCSVReport(context) },
                     colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextColor),
-                    border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f)),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    border = BorderStroke(1.dp, BorderColor),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Icon(Icons.Default.Description, contentDescription = null, tint = GoldColor, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(getString(R.string.export_csv))
                 }
 
-                HorizontalDivider(color = BgColor, modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(color = BorderColor, modifier = Modifier.padding(vertical = 4.dp))
 
                 Text(
                     text = getString(R.string.import_json),
                     fontWeight = FontWeight.Bold,
                     color = TextColor,
-                    fontSize = 12.sp
+                    style = MaterialTheme.typography.labelMedium
                 )
 
                 OutlinedTextField(
                     value = backupCodeToImport,
                     onValueChange = { backupCodeToImport = it },
                     placeholder = { Text(getString(R.string.import_paste_hint), fontSize = 11.sp) },
+                    shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = GoldColor,
+                        unfocusedBorderColor = BorderColor,
                         focusedTextColor = TextColor,
-                        unfocusedTextColor = TextColor
+                        unfocusedTextColor = TextColor,
+                        unfocusedLabelColor = TextSecondaryColor
                     ),
                     modifier = Modifier.fillMaxWidth().height(80.dp),
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp)
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = TextColor)
                 )
 
                 Button(
@@ -1953,13 +2115,22 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             backupCodeToImport = ""
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .background(GoldGradient, shape = RoundedCornerShape(14.dp))
                 ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("تنفيذ الاستيراد")
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("تنفيذ الاستيراد", fontWeight = FontWeight.Bold, color = Color.Black)
+                    }
                 }
             }
         }
@@ -1971,8 +2142,8 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 Toast.makeText(context, "تم مسح كافة البيانات وعودة الأرصدة للصفر.", Toast.LENGTH_LONG).show()
             },
             colors = ButtonDefaults.buttonColors(containerColor = RedColor, contentColor = Color.White),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth().testTag("wipe_all_data")
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(46.dp).testTag("wipe_all_data")
         ) {
             Icon(Icons.Default.DeleteForever, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(modifier = Modifier.width(8.dp))
@@ -1994,9 +2165,9 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         Dialog(onDismissRequest = { showBalanceEditor = false }) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = CardColor),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(18.dp),
                 modifier = Modifier.fillMaxWidth().padding(8.dp),
-                border = BorderStroke(1.dp, GoldColor.copy(alpha = 0.3f))
+                border = BorderStroke(1.dp, BorderColor)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState()),
@@ -2006,19 +2177,27 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                         text = getString(R.string.manual_balance_title),
                         fontWeight = FontWeight.Bold,
                         color = TextColor,
-                        fontSize = 16.sp,
+                        style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Text("أرصدة العملات الرقمية / Crypto", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("أرصدة العملات الرقمية / Crypto", color = GoldColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                     
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = uUSDT,
                             onValueChange = { uUSDT = it },
                             label = { Text("USDT") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2026,7 +2205,15 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             value = uUSDC,
                             onValueChange = { uUSDC = it },
                             label = { Text("USDC") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2037,7 +2224,15 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             value = uBTC,
                             onValueChange = { uBTC = it },
                             label = { Text("BTC") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2045,21 +2240,37 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             value = uETH,
                             onValueChange = { uETH = it },
                             label = { Text("ETH") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
                     }
 
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("أرصدة العملات المحلية / Fiat", color = GoldColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("أرصدة العملات المحلية / Fiat", color = GoldColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = uSYP,
                             onValueChange = { uSYP = it },
                             label = { Text("SYP") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2067,7 +2278,15 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             value = uUSD,
                             onValueChange = { uUSD = it },
                             label = { Text("USD") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2078,7 +2297,15 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             value = uTRY,
                             onValueChange = { uTRY = it },
                             label = { Text("TRY") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2086,7 +2313,15 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             value = uEUR,
                             onValueChange = { uEUR = it },
                             label = { Text("EUR") },
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = GoldColor, focusedTextColor = TextColor),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = GoldColor,
+                                unfocusedBorderColor = BorderColor,
+                                focusedTextColor = TextColor,
+                                unfocusedTextColor = TextColor,
+                                focusedLabelColor = GoldColor,
+                                unfocusedLabelColor = TextSecondaryColor
+                            ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             modifier = Modifier.weight(1f)
                         )
@@ -2109,17 +2344,21 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                             showBalanceEditor = false
                             Toast.makeText(context, "تم حفظ رأس المال والعملات المعدلة يدوياً بنجاح.", Toast.LENGTH_SHORT).show()
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = GoldColor, contentColor = Color.Black),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(GoldGradient, shape = RoundedCornerShape(14.dp))
                     ) {
-                        Text(getString(R.string.save_balances_btn), fontWeight = FontWeight.Bold)
+                        Text(getString(R.string.save_balances_btn), fontWeight = FontWeight.Bold, color = Color.Black)
                     }
 
                     OutlinedButton(
                         onClick = { showBalanceEditor = false },
-                        border = BorderStroke(1.dp, TextSecondaryColor),
-                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, BorderColor),
+                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(44.dp)
                     ) {
                         Text(getString(R.string.cancel_btn), color = TextColor)
