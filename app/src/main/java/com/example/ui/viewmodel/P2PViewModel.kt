@@ -42,6 +42,15 @@ class P2PViewModel(private val repository: P2PRepository, private val context: C
         _language.value = lang
     }
 
+    // Active trading fiat currency (separated tracking state)
+    private val _selectedFiat = MutableStateFlow(sharedPrefs.getString("selected_fiat", "SYP") ?: "SYP")
+    val selectedFiat: StateFlow<String> = _selectedFiat.asStateFlow()
+
+    fun setSelectedFiat(fiat: String) {
+        sharedPrefs.edit().putString("selected_fiat", fiat).apply()
+        _selectedFiat.value = fiat
+    }
+
     // Repos collections
     val trades: StateFlow<List<Trade>> = repository.allTrades
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())

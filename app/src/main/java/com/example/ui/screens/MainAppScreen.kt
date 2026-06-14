@@ -81,6 +81,11 @@ fun MainAppScreen(viewModel: P2PViewModel) {
 
         Scaffold(
             containerColor = BgColor,
+            topBar = {
+                if (currentTab in listOf("HOME", "HISTORY", "CALENDAR", "RATES")) {
+                    MarketSelectorBar(viewModel, ::getString)
+                }
+            },
             bottomBar = {
                 NavigationBar(
                     containerColor = CardColor,
@@ -132,6 +137,80 @@ fun MainAppScreen(viewModel: P2PViewModel) {
                     "CALENDAR" -> CalendarScreen(viewModel, { getString(it) })
                     "RATES" -> RatesScreen(viewModel, { getString(it) })
                     "SETTINGS" -> SettingsScreen(viewModel, { getString(it) })
+                }
+            }
+        }
+    }
+}
+
+// --- Market/Portfolio Active Currency Selector (Multi-currency Separated Profits) ---
+@Composable
+fun MarketSelectorBar(
+    viewModel: P2PViewModel,
+    getString: (Int) -> String
+) {
+    val activeFiat by viewModel.selectedFiat.collectAsState()
+    val fiats = listOf(
+        Triple("SYP", "ل.س", "USDT/SYP"),
+        Triple("USD", "$", "USDT/USD"),
+        Triple("TRY", "TL", "USDT/TRY"),
+        Triple("EUR", "€", "USDT/EUR")
+    )
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .testTag("market_selector"),
+        colors = CardDefaults.cardColors(containerColor = CardColor),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = "السوق النشط والتداول المنفصل / Active Market Selection",
+                color = TextSecondaryColor,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                fiats.forEach { (code, symbol, pairString) ->
+                    val isSelected = activeFiat == code
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) GoldGradient else Brush.verticalGradient(listOf(BgColor, BgColor)))
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) Color.Transparent else BorderColor,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .clickable { viewModel.setSelectedFiat(code) }
+                            .padding(4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = pairString,
+                                color = if (isSelected) Color.Black else TextColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = symbol,
+                                color = if (isSelected) Color.Black.copy(alpha = 0.8f) else TextSecondaryColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -294,21 +373,23 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val rates by viewModel.rates.collectAsState()
     val balanceOpt by viewModel.balance.collectAsState()
     val balance = balanceOpt ?: Balance()
+    val activeFiat by viewModel.selectedFiat.collectAsState()
 
-    val totalSypProfit = trades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
-    val totalTradesCount = trades.size
-    val maxSingleProfit = if (trades.filter { it.type == "SELL" }.isNotEmpty()) {
-        trades.filter { it.type == "SELL" }.maxOf { it.profitSYP }
+    val marketTrades = trades.filter { it.fiatCurrency == activeFiat }
+    val totalSypProfit = marketTrades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
+    val totalTradesCount = marketTrades.size
+    val maxSingleProfit = if (marketTrades.filter { it.type == "SELL" }.isNotEmpty()) {
+        marketTrades.filter { it.type == "SELL" }.maxOf { it.profitSYP }
     } else {
         0.0
     }
-    val totalFeesUsdt = trades.sumOf { it.fee }
+    val totalFeesUsdt = marketTrades.sumOf { it.fee }
 
     val todayStr = viewModel.getTodayString()
-    val todayTrades = trades.filter { it.date == todayStr }
+    val todayTrades = marketTrades.filter { it.date == todayStr }
     val todayTradesCount = todayTrades.size
     val todaySypProfit = todayTrades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
-    val currentRate = rates.firstOrNull()?.rate ?: 0.0
+    val currentRate = rates.filter { it.fiatCurrency == activeFiat }.firstOrNull()?.rate ?: 0.0
 
     Column(
         modifier = Modifier
@@ -320,7 +401,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     ) {
         // Aesthetic App Title Header
         SectionHeader(
-            title = "${getString(R.string.app_name)} - ${getString(R.string.rates_indicator)}",
+            title = "${getString(R.string.app_name)} - ${getString(R.string.rates_indicator)} ($activeFiat)",
             icon = Icons.Default.TrendingUp,
             gradient = GoldGradient
         )
@@ -396,14 +477,25 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     "TRY" to balance.balanceTRY,
                     "EUR" to balance.balanceEUR
                 ).forEach { (code, amount) ->
+                    val isMarketSelected = code == activeFiat
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp)
+                            .background(if (isMarketSelected) GoldColor.copy(alpha = 0.08f) else Color.Transparent, shape = RoundedCornerShape(6.dp))
+                            .padding(horizontal = if (isMarketSelected) 4.dp else 0.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(code, color = TextColor, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(code, color = if (isMarketSelected) GoldColor else TextColor, fontSize = 13.sp, fontWeight = if (isMarketSelected) FontWeight.Bold else FontWeight.Medium)
+                            if (isMarketSelected) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("(السوق المختار)", color = GoldColor, fontSize = 10.sp)
+                            }
+                        }
                         Text(
                             "${formatSyp(amount, code)} $code",
-                            color = GoldColor,
+                            color = if (isMarketSelected) GoldColor else TextColor,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -414,8 +506,8 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
 
         // Merged Fee inside Total profits KPI card (Asymmetric Layout - Requirement 5)
         KpiCard(
-            title = getString(R.string.total_profits),
-            value = "${formatSyp(totalSypProfit, "SYP")} L.S / ل.س",
+            title = "${getString(R.string.total_profits)} ($activeFiat)",
+            value = "${formatSyp(totalSypProfit, activeFiat)} $activeFiat",
             valueColor = if (totalSypProfit >= 0.0) GreenColor else RedColor,
             modifier = Modifier.fillMaxWidth(),
             icon = Icons.Default.AccountBalanceWallet,
@@ -447,7 +539,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             KpiCard(
-                title = "عدد الصفقات الكلي",
+                title = "صفقات $activeFiat",
                 value = "$totalTradesCount صفقة",
                 valueColor = TextColor,
                 modifier = Modifier.weight(1f),
@@ -455,8 +547,8 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 gradient = PurpleGradient
             )
             KpiCard(
-                title = "أعلى ربح صفقة",
-                value = "${formatSyp(maxSingleProfit, "SYP")} ل.س",
+                title = "أعلى ربح صفقة ($activeFiat)",
+                value = "${formatSyp(maxSingleProfit, activeFiat)} $activeFiat",
                 valueColor = GreenColor,
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.TrendingUp,
@@ -492,7 +584,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                         )
                     }
                     Text(
-                        text = getString(R.string.today_trades),
+                        text = "${getString(R.string.today_trades)} ($activeFiat)",
                         color = TextColor,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
@@ -510,7 +602,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text("أرباح اليوم التقديرية", color = TextSecondaryColor, style = MaterialTheme.typography.labelMedium)
                         Text(
-                            text = "${formatSyp(todaySypProfit, "SYP")} ل.س",
+                            text = "${formatSyp(todaySypProfit, activeFiat)} $activeFiat",
                             color = if (todaySypProfit >= 0.0) GreenColor else RedColor,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
@@ -527,6 +619,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
 fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (Int) -> String) {
     val context = LocalContext.current
     val todayStr = viewModel.getTodayString()
+    val activeFiat by viewModel.selectedFiat.collectAsState()
 
     // Supported multi-currency selection options
     val cryptos = listOf("USDT", "USDC", "BTC", "ETH")
@@ -534,7 +627,13 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
 
     var type by remember { mutableStateOf(editingTrade?.type ?: "BUY") }
     var selectedCrypto by remember { mutableStateOf(editingTrade?.cryptoCurrency ?: "USDT") }
-    var selectedFiat by remember { mutableStateOf(editingTrade?.fiatCurrency ?: "SYP") }
+    var selectedFiat by remember { mutableStateOf(editingTrade?.fiatCurrency ?: activeFiat) }
+
+    LaunchedEffect(activeFiat) {
+        if (editingTrade == null) {
+            selectedFiat = activeFiat
+        }
+    }
     var amountInput by remember { mutableStateOf(editingTrade?.amount?.toString() ?: "") }
     var rateInput by remember { mutableStateOf(editingTrade?.rate?.toString() ?: "") }
     var feeInput by remember { mutableStateOf(editingTrade?.fee?.toString() ?: "") }
@@ -795,6 +894,7 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
 fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val context = LocalContext.current
     val trades by viewModel.trades.collectAsState()
+    val activeFiat by viewModel.selectedFiat.collectAsState()
 
     var activeFilter by remember { mutableStateOf("ALL") }
     var searchQuery by remember { mutableStateOf("") }
@@ -803,7 +903,7 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     var selectedTradeOptions by remember { mutableStateOf<Trade?>(null) }
 
     // Multi-faceted SearchView filtering (Date, Client, Type, Currency) - Requirement 6
-    val filteredTrades = trades.filter { trade ->
+    val filteredTrades = trades.filter { it.fiatCurrency == activeFiat }.filter { trade ->
         val matchesType = when (activeFilter) {
             "BUY" -> trade.type == "BUY"
             "SELL" -> trade.type == "SELL"
@@ -830,7 +930,7 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         SectionHeader(
-            title = getString(R.string.history),
+            title = "${getString(R.string.history)} ($activeFiat)",
             icon = Icons.Default.List,
             gradient = GoldGradient
         )
@@ -1131,6 +1231,7 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
 fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val context = LocalContext.current
     val rates by viewModel.rates.collectAsState()
+    val activeFiat by viewModel.selectedFiat.collectAsState()
 
     val cryptos = listOf("USDT", "USDC", "BTC", "ETH")
     val fiats = listOf("SYP", "USD", "TRY", "EUR")
@@ -1138,7 +1239,11 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     var rateInput by remember { mutableStateOf("") }
     var typeSelector by remember { mutableStateOf("BUY") }
     var selectedCrypto by remember { mutableStateOf("USDT") }
-    var selectedFiat by remember { mutableStateOf("SYP") }
+    var selectedFiat by remember { mutableStateOf(activeFiat) }
+
+    LaunchedEffect(activeFiat) {
+        selectedFiat = activeFiat
+    }
 
     Column(
         modifier = Modifier
@@ -1258,7 +1363,7 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         ) {
             Box(modifier = Modifier.padding(12.dp)) {
                 RatesLineChart(
-                    rates = rates,
+                    rates = rates.filter { it.fiatCurrency == activeFiat && it.cryptoCurrency == selectedCrypto },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -1381,6 +1486,7 @@ fun RatesLineChart(rates: List<ExchangeRate>, modifier: Modifier = Modifier) {
 fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val context = LocalContext.current
     val trades by viewModel.trades.collectAsState()
+    val activeFiat by viewModel.selectedFiat.collectAsState()
 
     var currentYear by remember { mutableStateOf(Calendar.getInstance().get(Calendar.YEAR)) }
     var currentMonth by remember { mutableStateOf(Calendar.getInstance().get(Calendar.MONTH)) }
@@ -1395,7 +1501,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val monthStr = String.format(Locale.US, "%02d", currentMonth + 1)
     val targetPrefix = "$yearStr-$monthStr"
 
-    val monthlyTrades = trades.filter { it.date.startsWith(targetPrefix) }
+    val monthlyTrades = trades.filter { it.fiatCurrency == activeFiat && it.date.startsWith(targetPrefix) }
     val workingDaysCount = monthlyTrades.map { it.date }.toSet().size
     val monthlyProfit = monthlyTrades.filter { it.type == "SELL" }.sumOf { it.profitSYP }
 
@@ -1507,7 +1613,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             )
             KpiCard(
                 title = getString(R.string.monthly_profit_total),
-                value = "${formatSyp(monthlyProfit, "SYP")} SP",
+                value = "${formatSyp(monthlyProfit, activeFiat)} $activeFiat",
                 valueColor = if (monthlyProfit >= 0.0) GreenColor else RedColor,
                 gradient = if (monthlyProfit >= 0.0) GreenGradient else RedGradient,
                 icon = Icons.Default.TrendingUp,
@@ -1522,7 +1628,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         ) {
             KpiCard(
                 title = getString(R.string.avg_profit),
-                value = "${formatSyp(avgProfitPerTrade, "SYP")} SP",
+                value = "${formatSyp(avgProfitPerTrade, activeFiat)} $activeFiat",
                 valueColor = GreenColor,
                 gradient = BlueGradient,
                 icon = Icons.Default.Star,
@@ -1545,7 +1651,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
         ) {
             KpiCard(
                 title = "${getString(R.string.best_day)} ($bestDayStr)",
-                value = "${formatSyp(bestDayVal, "SYP")} SP",
+                value = "${formatSyp(bestDayVal, activeFiat)} $activeFiat",
                 valueColor = GreenColor,
                 gradient = GreenGradient,
                 icon = Icons.Default.ThumbUp,
@@ -1553,7 +1659,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
             )
             KpiCard(
                 title = "${getString(R.string.worst_day)} ($worstDayStr)",
-                value = "${formatSyp(worstDayVal, "SYP")} SP",
+                value = "${formatSyp(worstDayVal, activeFiat)} $activeFiat",
                 valueColor = RedColor,
                 gradient = RedGradient,
                 icon = Icons.Default.ThumbDown,
