@@ -152,9 +152,7 @@ fun MarketSelectorBar(
     val activeFiat by viewModel.selectedFiat.collectAsState()
     val fiats = listOf(
         Triple("SYP", "ل.س", "USDT/SYP"),
-        Triple("USD", "$", "USDT/USD"),
-        Triple("TRY", "TL", "USDT/TRY"),
-        Triple("EUR", "€", "USDT/EUR")
+        Triple("USD", "$", "USDT/USD")
     )
 
     Card(
@@ -263,11 +261,24 @@ fun formatSyp(value: Double, code: String = "SYP"): String {
     return df.format(value)
 }
 
-fun formatCompactSyp(value: Double): String {
-    return when {
-        Math.abs(value) >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000)
-        Math.abs(value) >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000)
-        else -> String.format(Locale.US, "%.0f", value)
+fun formatCompactSyp(value: Double, code: String = "SYP"): String {
+    return when (code.uppercase()) {
+        "USD" -> {
+            if (Math.abs(value) < 1000.0) {
+                String.format(Locale.US, "%.1f", value)
+            } else if (Math.abs(value) >= 1_000_000) {
+                String.format(Locale.US, "%.1fM", value / 1_000_000)
+            } else {
+                String.format(Locale.US, "%.1fK", value / 1_000)
+            }
+        }
+        else -> {
+            when {
+                Math.abs(value) >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000)
+                Math.abs(value) >= 1_000 -> String.format(Locale.US, "%.1fK", value / 1_000)
+                else -> String.format(Locale.US, "%.0f", value)
+            }
+        }
     }
 }
 
@@ -445,10 +456,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 Text("Crypto / الرقمية", color = GoldColor, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
                 listOf(
-                    "USDT" to balance.balanceUSDT,
-                    "USDC" to balance.balanceUSDC,
-                    "BTC" to balance.balanceBTC,
-                    "ETH" to balance.balanceETH
+                    "USDT" to balance.balanceUSDT
                 ).forEach { (code, amount) ->
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
@@ -473,9 +481,7 @@ fun HomeScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                 Spacer(modifier = Modifier.height(6.dp))
                 listOf(
                     "SYP" to balance.balanceSYP,
-                    "USD" to balance.balanceUSD,
-                    "TRY" to balance.balanceTRY,
-                    "EUR" to balance.balanceEUR
+                    "USD" to balance.balanceUSD
                 ).forEach { (code, amount) ->
                     val isMarketSelected = code == activeFiat
                     Row(
@@ -622,8 +628,8 @@ fun AddTradeScreen(viewModel: P2PViewModel, editingTrade: Trade?, getString: (In
     val activeFiat by viewModel.selectedFiat.collectAsState()
 
     // Supported multi-currency selection options
-    val cryptos = listOf("USDT", "USDC", "BTC", "ETH")
-    val fiats = listOf("SYP", "USD", "TRY", "EUR")
+    val cryptos = listOf("USDT")
+    val fiats = listOf("SYP", "USD")
 
     var type by remember { mutableStateOf(editingTrade?.type ?: "BUY") }
     var selectedCrypto by remember { mutableStateOf(editingTrade?.cryptoCurrency ?: "USDT") }
@@ -1063,7 +1069,7 @@ fun HistoryScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                                     ) {
                                         Text("صافي الأرباح:", style = MaterialTheme.typography.labelMedium, color = TextSecondaryColor)
                                         Text(
-                                            "${formatSyp(trade.profitSYP, "SYP")} SYP",
+                                            "${formatSyp(trade.profitSYP, trade.fiatCurrency)} ${trade.fiatCurrency}",
                                             color = if (trade.profitSYP >= 0) GreenColor else RedColor,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp
@@ -1233,8 +1239,8 @@ fun RatesScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     val rates by viewModel.rates.collectAsState()
     val activeFiat by viewModel.selectedFiat.collectAsState()
 
-    val cryptos = listOf("USDT", "USDC", "BTC", "ETH")
-    val fiats = listOf("SYP", "USD", "TRY", "EUR")
+    val cryptos = listOf("USDT")
+    val fiats = listOf("SYP", "USD")
 
     var rateInput by remember { mutableStateOf("") }
     var typeSelector by remember { mutableStateOf("BUY") }
@@ -1747,7 +1753,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                                         if (isWorkDay) {
                                             if (dayProfit != 0.0) {
                                                 Text(
-                                                    text = formatCompactSyp(dayProfit),
+                                                    text = formatCompactSyp(dayProfit, activeFiat),
                                                     color = if (dayProfit >= 0.0) GreenColor else RedColor,
                                                     fontSize = 8.sp,
                                                     fontWeight = FontWeight.Bold,
@@ -1848,7 +1854,7 @@ fun CalendarScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                                     if (trade.type == "SELL") {
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text("الربح", color = TextSecondaryColor, fontSize = 10.sp)
-                                            Text("+${formatSyp(trade.profitSYP, "SYP")}", color = GreenColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                            Text("+${formatSyp(trade.profitSYP, trade.fiatCurrency)} ${trade.fiatCurrency}", color = GreenColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                         }
                                     }
                                 }
@@ -2260,13 +2266,8 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
     // Dynamic Multi-Currency Balance Editor Dialog (Requirement 2 & 5)
     if (showBalanceEditor) {
         var uUSDT by remember { mutableStateOf(balance.balanceUSDT.toString()) }
-        var uUSDC by remember { mutableStateOf(balance.balanceUSDC.toString()) }
-        var uBTC by remember { mutableStateOf(balance.balanceBTC.toString()) }
-        var uETH by remember { mutableStateOf(balance.balanceETH.toString()) }
         var uSYP by remember { mutableStateOf(balance.balanceSYP.toString()) }
         var uUSD by remember { mutableStateOf(balance.balanceUSD.toString()) }
-        var uTRY by remember { mutableStateOf(balance.balanceTRY.toString()) }
-        var uEUR by remember { mutableStateOf(balance.balanceEUR.toString()) }
 
         Dialog(onDismissRequest = { showBalanceEditor = false }) {
             Card(
@@ -2305,58 +2306,7 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                                 unfocusedLabelColor = TextSecondaryColor
                             ),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = uUSDC,
-                            onValueChange = { uUSDC = it },
-                            label = { Text("USDC") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldColor,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = TextColor,
-                                unfocusedTextColor = TextColor,
-                                focusedLabelColor = GoldColor,
-                                unfocusedLabelColor = TextSecondaryColor
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = uBTC,
-                            onValueChange = { uBTC = it },
-                            label = { Text("BTC") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldColor,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = TextColor,
-                                unfocusedTextColor = TextColor,
-                                focusedLabelColor = GoldColor,
-                                unfocusedLabelColor = TextSecondaryColor
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = uETH,
-                            onValueChange = { uETH = it },
-                            label = { Text("ETH") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldColor,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = TextColor,
-                                unfocusedTextColor = TextColor,
-                                focusedLabelColor = GoldColor,
-                                unfocusedLabelColor = TextSecondaryColor
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
 
@@ -2398,41 +2348,6 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                         )
                     }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = uTRY,
-                            onValueChange = { uTRY = it },
-                            label = { Text("TRY") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldColor,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = TextColor,
-                                unfocusedTextColor = TextColor,
-                                focusedLabelColor = GoldColor,
-                                unfocusedLabelColor = TextSecondaryColor
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = uEUR,
-                            onValueChange = { uEUR = it },
-                            label = { Text("EUR") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = GoldColor,
-                                unfocusedBorderColor = BorderColor,
-                                focusedTextColor = TextColor,
-                                unfocusedTextColor = TextColor,
-                                focusedLabelColor = GoldColor,
-                                unfocusedLabelColor = TextSecondaryColor
-                            ),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Button(
@@ -2441,11 +2356,11 @@ fun SettingsScreen(viewModel: P2PViewModel, getString: (Int) -> String) {
                                 syp = uSYP.toDoubleOrNull() ?: 0.0,
                                 usdt = uUSDT.toDoubleOrNull() ?: 0.0,
                                 usd = uUSD.toDoubleOrNull() ?: 0.0,
-                                tryVal = uTRY.toDoubleOrNull() ?: 0.0,
-                                eur = uEUR.toDoubleOrNull() ?: 0.0,
-                                usdc = uUSDC.toDoubleOrNull() ?: 0.0,
-                                btc = uBTC.toDoubleOrNull() ?: 0.0,
-                                eth = uETH.toDoubleOrNull() ?: 0.0
+                                tryVal = 0.0,
+                                eur = 0.0,
+                                usdc = 0.0,
+                                btc = 0.0,
+                                eth = 0.0
                             )
                             showBalanceEditor = false
                             Toast.makeText(context, "تم حفظ رأس المال والعملات المعدلة يدوياً بنجاح.", Toast.LENGTH_SHORT).show()

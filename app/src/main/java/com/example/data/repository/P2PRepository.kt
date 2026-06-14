@@ -149,12 +149,22 @@ class P2PRepository(
         val totalBuyAmount = priorBuys.sumOf { it.amount }
         if (totalBuyAmount == 0.0) {
             val profit = (trade.amount * trade.rate) - (trade.fee * trade.rate)
-            return Pair(0.0, Math.round(profit).toDouble())
+            val roundedProfit = if (trade.fiatCurrency == "USD") {
+                Math.round(profit * 100.0) / 100.0
+            } else {
+                Math.round(profit).toDouble()
+            }
+            return Pair(0.0, roundedProfit)
         }
         val weightedSum = priorBuys.sumOf { it.rate * it.amount }
         val avgBuyRate = weightedSum / totalBuyAmount
         val profit = (trade.rate - avgBuyRate) * trade.amount - (trade.fee * trade.rate)
-        return Pair(avgBuyRate, Math.round(profit).toDouble())
+        val roundedProfit = if (trade.fiatCurrency == "USD") {
+            Math.round(profit * 100.0) / 100.0
+        } else {
+            Math.round(profit).toDouble()
+        }
+        return Pair(avgBuyRate, roundedProfit)
     }
 
     private fun updateBalanceValue(balance: Balance, currency: String, diff: Double): Balance {
